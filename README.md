@@ -151,15 +151,15 @@ robot:
   name: manta
 
   tags:
-    - id: 0
-      size: 0.06
+    - id: 6
+      size: 0.15
       pose:
         position:
           x: 0.0
-          y: 0.0
-          z: 0.0
+          y: -0.4
+          z: 0.1
         rotation:
-          roll: 0.0
+          roll: 1.57
           pitch: 0.0
           yaw: 0.0
 ```
@@ -185,6 +185,36 @@ RVizなしでmarkerだけ出す場合:
 roslaunch apriltag_box_detection robot_config_viewer.launch rviz:=false
 ```
 
+## robot相対box推定
+ロボットtagが見えているときに `camera -> robot` を更新し，既存の `/box_pose` を `robot_config` 座標へ変換してpublishする。
+
+```text
+/robot_relative_box_pose
+/robot_relative_box_markers
+```
+
+ロボットtagが一度見えた後にロストした場合は，最後に見えていた `camera -> robot` を保持して使う。まだ一度もロボットtagが見えていない場合はpublishしない。
+
+```bash
+roslaunch apriltag_box_detection robot_relative_box_detection.launch \
+  image_topic:=/usb_cam/image_raw \
+  camera_info_topic:=/usb_cam/camera_info
+```
+
+RealSenseなど別camera topicを使う場合:
+
+```bash
+roslaunch apriltag_box_detection robot_relative_box_detection.launch \
+  image_topic:=/camera/color/image_raw \
+  camera_info_topic:=/camera/color/camera_info
+```
+
+RealSense起動も含めて一括で動かす場合:
+
+```bash
+roslaunch apriltag_box_detection realsense_robot_relative_box_detection.launch
+```
+
 ## AprilTag検出設定
 AprilTag検出ノードに渡す設定はこのパッケージ内に置いている。
 
@@ -193,7 +223,7 @@ src/apriltag_box_detection/config/settings.yaml
 src/apriltag_box_detection/config/tags.yaml
 ```
 
-`tags.yaml` には検出したいtag idとサイズを書く。今は `id 0-5` を `0.054m` として登録している。
+`tags.yaml` には検出したいtag idとサイズを書く。今はbox用 `id 0-5` を `0.06m`，robot用 `id 6` を `0.15m` として登録している。
 
 ## RVizで確認
 ```bash

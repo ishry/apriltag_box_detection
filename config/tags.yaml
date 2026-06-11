@@ -7,7 +7,8 @@ standalone_tags:
     {id: 2, size: 0.06},
     {id: 3, size: 0.06},
     {id: 4, size: 0.06},
-    {id: 5, size: 0.06}
+    {id: 5, size: 0.06},
+    {id: 6, size: 0.15}
   ]
 
 tag_bundles:

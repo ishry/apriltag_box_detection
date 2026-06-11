@@ -1,0 +1,51 @@
+<launch>
+  <arg name="image_topic" default="/usb_cam/image_raw" />
+  <arg name="camera_info_topic" default="/usb_cam/camera_info" />
+  <arg name="box_config_file" default="$(find apriltag_box_detection)/config/box.yaml" />
+  <arg name="robot_config_file" default="$(find apriltag_box_detection)/config/robot.yaml" />
+  <arg name="tag_settings_file" default="$(find apriltag_box_detection)/config/settings.yaml" />
+  <arg name="tag_config_file" default="$(find apriltag_box_detection)/config/tags.yaml" />
+  <arg name="urdf_file" default="/home/leus/catkin_ws/manta_ws/src/manta_controller/manta_ros_bridge_tutorials/models/MANTA_HR_TAIL.urdf" />
+  <arg name="manta_package_root" default="/home/leus/catkin_ws/manta_ws/src/manta_controller" />
+  <arg name="root_frame" default="CHASSIS" />
+  <arg name="overlay" default="true" />
+
+  <env name="ROS_PACKAGE_PATH" value="$(arg manta_package_root):$(optenv ROS_PACKAGE_PATH)" />
+
+  <param name="robot_description" textfile="$(arg urdf_file)" />
+
+  <node pkg="joint_state_publisher" type="joint_state_publisher"
+        name="robot_relative_joint_state_publisher" output="screen" />
+
+  <node pkg="robot_state_publisher" type="robot_state_publisher"
+        name="robot_relative_robot_state_publisher" output="screen" />
+
+  <node pkg="tf" type="static_transform_publisher"
+        name="robot_relative_root_tf"
+        args="0 0 0 0 0 0 robot_config $(arg root_frame) 100" />
+
+  <include file="$(find apriltag_box_detection)/launch/box_detection.launch">
+    <arg name="image_topic" value="$(arg image_topic)" />
+    <arg name="camera_info_topic" value="$(arg camera_info_topic)" />
+    <arg name="box_config_file" value="$(arg box_config_file)" />
+    <arg name="tag_settings_file" value="$(arg tag_settings_file)" />
+    <arg name="tag_config_file" value="$(arg tag_config_file)" />
+    <arg name="overlay" value="$(arg overlay)" />
+    <arg name="rviz" value="false" />
+  </include>
+
+  <node pkg="apriltag_box_detection" type="robot_config_viewer.py"
+        name="robot_config_viewer" output="screen">
+    <param name="config_file" value="$(arg robot_config_file)" />
+  </node>
+
+  <node pkg="apriltag_box_detection" type="robot_relative_box_pose_estimator.py"
+        name="robot_relative_box_pose_estimator" output="screen">
+    <param name="robot_config_file" value="$(arg robot_config_file)" />
+    <param name="box_config_file" value="$(arg box_config_file)" />
+    <remap from="tag_detections" to="/tag_detections" />
+    <remap from="box_pose" to="/box_pose" />
+    <remap from="robot_relative_box_pose" to="/robot_relative_box_pose" />
+    <remap from="robot_relative_box_markers" to="/robot_relative_box_markers" />
+  </node>
+</launch>

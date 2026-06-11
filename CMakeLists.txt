@@ -17,6 +17,7 @@ catkin_install_python(PROGRAMS
   scripts/box_pose_estimator.py
   scripts/box_config_viewer.py
   scripts/robot_config_viewer.py
+  scripts/robot_relative_box_pose_estimator.py
   scripts/generate_tag_meshes.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
