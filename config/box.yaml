@@ -12,8 +12,8 @@ boxes:
         size: 0.054
         face: 0
         offset:
-          u: -0.03
-          v: 0.02
+          u: -0.00
+          v: 0.00
           normal: 0.002
         rotation:
           yaw: 0.0

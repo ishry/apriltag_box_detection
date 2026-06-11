@@ -3,14 +3,17 @@ project(apriltag_box_detection)
 
 find_package(catkin REQUIRED COMPONENTS
   apriltag_ros
+  cv_bridge
   geometry_msgs
   rospy
+  sensor_msgs
   visualization_msgs
 )
 
 catkin_package()
 
 catkin_install_python(PROGRAMS
+  scripts/box_image_overlay.py
   scripts/box_pose_estimator.py
   scripts/box_config_viewer.py
   scripts/generate_tag_meshes.py

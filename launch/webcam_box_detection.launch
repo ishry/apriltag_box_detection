@@ -9,6 +9,7 @@
   <arg name="box_config_file" default="$(find apriltag_box_detection)/config/box.yaml" />
   <arg name="tag_settings_file" default="$(find apriltag_box_detection)/config/settings.yaml" />
   <arg name="tag_config_file" default="$(find apriltag_box_detection)/config/tags.yaml" />
+  <arg name="overlay" default="true" />
   <arg name="rviz" default="true" />
 
   <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" output="screen">
@@ -27,6 +28,7 @@
     <arg name="box_config_file" value="$(arg box_config_file)" />
     <arg name="tag_settings_file" value="$(arg tag_settings_file)" />
     <arg name="tag_config_file" value="$(arg tag_config_file)" />
+    <arg name="overlay" value="$(arg overlay)" />
     <arg name="rviz" value="$(arg rviz)" />
   </include>
 </launch>

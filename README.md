@@ -164,6 +164,14 @@ roslaunch apriltag_box_detection box_detection.launch \
 /tag_detections
 /box_pose
 /box_detection_markers
+/box_detection_image
+```
+
+画像上のbox辺を確認する場合:
+
+```bash
+rqt_image_view
+# /box_detection_image を選ぶ
 ```
 
 ## usb_cam込みで起動
@@ -204,3 +212,5 @@ roslaunch apriltag_box_detection box_detection.launch \
 - tagが小さくて選びにくい場合は，GUI windowを広げると画像表示も拡大される
 - `normal` を0にするとbox面とtag表示が重なって見づらいので，少しだけ浮かせる
 - box推定には画像topicだけでなく，キャリブ済みのcamera_info topicが必要
+- `/box_detection_image` はcamera_infoの内部パラメータで3D boxを画像に投影している
+- 歪みが気になる場合は，raw画像よりrectified画像topicを使う
