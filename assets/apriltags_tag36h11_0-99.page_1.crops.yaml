@@ -1,0 +1,39 @@
+source: apriltags_tag36h11_0-99.pdf
+tags:
+- id: 0
+  rect:
+    x: 197
+    y: 286
+    width: 163
+    height: 158
+- id: 1
+  rect:
+    x: 412
+    y: 284
+    width: 161
+    height: 162
+- id: 2
+  rect:
+    x: 625
+    y: 284
+    width: 165
+    height: 162
+- id: 3
+  rect:
+    x: 842
+    y: 283
+    width: 157
+    height: 166
+- id: 4
+  rect:
+    x: 1049
+    y: 283
+    width: 167
+    height: 164
+- id: 5
+  rect:
+    x: 1263
+    y: 286
+    width: 168
+    height: 163
+page: 1

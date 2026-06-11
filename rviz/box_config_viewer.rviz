@@ -1,0 +1,47 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 0.1
+      Class: rviz/Grid
+      Color: 160; 160; 164
+      Enabled: true
+      Name: Grid
+      Plane: XY
+      Reference Frame: box_config
+      Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /box_config_markers
+      Name: Box Config
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: box_config
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz/Interact
+    - Class: rviz/MoveCamera
+    - Class: rviz/Select
+  Value: true
+Views:
+  Current:
+    Class: rviz/Orbit
+    Distance: 0.8
+    Focal Point:
+      X: 0
+      Y: 0
+      Z: 0
+    Name: Current View
+    Pitch: 0.6
+    Target Frame: box_config
+    Yaw: 0.8
+  Saved: ~
