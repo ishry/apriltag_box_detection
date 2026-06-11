@@ -1,0 +1,53 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 0.1
+      Class: rviz/Grid
+      Color: 160; 160; 164
+      Enabled: true
+      Name: Grid
+      Plane: XY
+      Reference Frame: usb_cam
+      Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /box_detection_markers
+      Name: Box Detection
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: true
+    - Class: rviz/Pose
+      Enabled: true
+      Name: Box Pose
+      Shape: Axes
+      Topic: /box_pose
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: usb_cam
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz/Interact
+    - Class: rviz/MoveCamera
+    - Class: rviz/Select
+  Value: true
+Views:
+  Current:
+    Class: rviz/Orbit
+    Distance: 1.2
+    Focal Point:
+      X: 0
+      Y: 0
+      Z: 0.6
+    Name: Current View
+    Pitch: 0.45
+    Target Frame: usb_cam
+    Yaw: 0.8
+  Saved: ~

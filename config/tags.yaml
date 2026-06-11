@@ -1,0 +1,15 @@
+# Definitions of tags to detect.
+# All lengths are in meters.
+standalone_tags:
+  [
+    {id: 0, size: 0.054},
+    {id: 1, size: 0.054},
+    {id: 2, size: 0.054},
+    {id: 3, size: 0.054},
+    {id: 4, size: 0.054},
+    {id: 5, size: 0.054}
+  ]
+
+tag_bundles:
+  [
+  ]

@@ -1,0 +1,29 @@
+<launch>
+  <arg name="image_topic" default="/usb_cam/image_raw" />
+  <arg name="camera_info_topic" default="/usb_cam/camera_info" />
+  <arg name="box_config_file" default="$(find apriltag_box_detection)/config/box.yaml" />
+  <arg name="tag_settings_file" default="$(find apriltag_box_detection)/config/settings.yaml" />
+  <arg name="tag_config_file" default="$(find apriltag_box_detection)/config/tags.yaml" />
+  <arg name="rviz" default="true" />
+
+  <node pkg="apriltag_ros" type="apriltag_ros_continuous_node"
+        name="apriltag_ros_continuous_node" output="screen">
+
+    <remap from="image_rect" to="$(arg image_topic)" />
+    <remap from="camera_info" to="$(arg camera_info_topic)" />
+
+    <rosparam command="load" file="$(arg tag_settings_file)" />
+    <rosparam command="load" file="$(arg tag_config_file)" />
+  </node>
+
+  <node pkg="apriltag_box_detection" type="box_pose_estimator.py"
+        name="box_pose_estimator" output="screen">
+    <param name="config_file" value="$(arg box_config_file)" />
+    <remap from="tag_detections" to="/tag_detections" />
+    <remap from="box_pose" to="/box_pose" />
+    <remap from="box_detection_markers" to="/box_detection_markers" />
+  </node>
+
+  <node if="$(arg rviz)" pkg="rviz" type="rviz" name="rviz"
+        args="-d $(find apriltag_box_detection)/rviz/box_detection.rviz" />
+</launch>
