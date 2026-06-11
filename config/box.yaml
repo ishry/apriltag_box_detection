@@ -3,62 +3,62 @@ frame_id: box_config
 boxes:
   - name: box_0
     size:
-      x: 0.30
-      y: 0.20
-      z: 0.15
+      x: 0.21
+      y: 0.21
+      z: 0.07
 
     tags:
       - id: 0
-        size: 0.054
+        size: 0.06
         face: 0
         offset:
-          u: -0.00
+          u: 0.00
           v: 0.00
           normal: 0.002
         rotation:
           yaw: 0.0
       - id: 1
-        size: 0.054
+        size: 0.06
         face: 1
         offset:
-          u: 0.03
-          v: -0.02
+          u: 0.00
+          v: 0.00
           normal: 0.002
         rotation:
-          yaw: 1.5708
+          yaw: 0.0
       - id: 2
-        size: 0.054
+        size: 0.06
         face: 2
         offset:
-          u: 0.02
-          v: 0.01
+          u: 0.00
+          v: 0.00
           normal: 0.002
         rotation:
-          yaw: 0.7854
+          yaw: 0.0
       - id: 3
-        size: 0.054
+        size: 0.06
         face: 3
         offset:
-          u: -0.02
-          v: 0.01
+          u: 0.00
+          v: 0.00
           normal: 0.002
         rotation:
-          yaw: -0.7854
+          yaw: 0.0
       - id: 4
-        size: 0.054
+        size: 0.06
         face: 4
         offset:
-          u: 0.04
-          v: -0.03
+          u: 0.06
+          v: 00.00
           normal: 0.002
         rotation:
-          yaw: 3.1416
+          yaw: 0.0
       - id: 5
-        size: 0.054
+        size: 0.06
         face: 5
         offset:
-          u: -0.04
-          v: 0.03
+          u: 0.00
+          v: 0.00
           normal: 0.002
         rotation:
-          yaw: -1.5708
+          yaw: 0.0

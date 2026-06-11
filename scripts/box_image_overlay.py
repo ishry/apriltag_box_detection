@@ -13,9 +13,15 @@ from sensor_msgs.msg import CameraInfo, Image
 
 
 BOX_EDGES = [
-    (0, 1), (1, 2), (2, 3), (3, 0),
-    (4, 5), (5, 6), (6, 7), (7, 4),
-    (0, 4), (1, 5), (2, 6), (3, 7),
+    ((0, 1), (0, 0, 255)), ((3, 2), (0, 0, 255)), ((4, 5), (0, 0, 255)), ((7, 6), (0, 0, 255)),
+    ((0, 3), (0, 255, 0)), ((1, 2), (0, 255, 0)), ((4, 7), (0, 255, 0)), ((5, 6), (0, 255, 0)),
+    ((0, 4), (255, 0, 0)), ((1, 5), (255, 0, 0)), ((2, 6), (255, 0, 0)), ((3, 7), (255, 0, 0)),
+]
+
+BOX_AXES = [
+    ("+X", (1.0, 0.0, 0.0), (0, 0, 255)),
+    ("+Y", (0.0, 1.0, 0.0), (0, 255, 0)),
+    ("+Z", (0.0, 0.0, 1.0), (255, 0, 0)),
 ]
 
 
@@ -130,15 +136,35 @@ class BoxImageOverlay:
         corners = [transform_point(transform, corner) for corner in self.box_corners()]
         pixels = [self.project(point) for point in corners]
 
-        for start, end in BOX_EDGES:
+        for edge, color in BOX_EDGES:
+            start, end = edge
             if pixels[start] is None or pixels[end] is None:
                 continue
-            cv2.line(image, pixels[start], pixels[end], (0, 255, 80), 2, cv2.LINE_AA)
+            cv2.line(image, pixels[start], pixels[end], color, 2, cv2.LINE_AA)
 
         center = self.project((transform[0][3], transform[1][3], transform[2][3]))
         if center:
             cv2.circle(image, center, 4, (0, 0, 255), -1)
             cv2.putText(image, self.box_name, (center[0] + 8, center[1] - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            self.draw_axes(image, transform, center)
+
+    def draw_axes(self, image, transform, center):
+        sx = float(self.box_size["x"])
+        sy = float(self.box_size["y"])
+        sz = float(self.box_size["z"])
+        axis_length = max(min(sx, sy, sz) * 0.8, 0.04)
+
+        for label, axis, color in BOX_AXES:
+            endpoint = transform_point(transform, (
+                axis[0] * axis_length,
+                axis[1] * axis_length,
+                axis[2] * axis_length,
+            ))
+            pixel = self.project(endpoint)
+            if pixel is None:
+                continue
+            cv2.line(image, center, pixel, color, 3, cv2.LINE_AA)
+            cv2.putText(image, label, (pixel[0] + 4, pixel[1] - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
 
     def project(self, point):
         x, y, z = point
