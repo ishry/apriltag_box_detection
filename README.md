@@ -239,6 +239,10 @@ roslaunch apriltag_box_detection realsense_box_detection.launch \
 roslaunch apriltag_box_detection realsense_box_detection.launch camera:=camera_1
 ```
 
+この場合，RealSenseの画像frame名も `camera_1_color_optical_frame` のように変わる。
+RVizにboxが出ない場合は，RVizのFixed Frameを画像topicの `header.frame_id` に合わせる。
+標準の `camera:=camera` では `camera_color_optical_frame` を使う。
+
 ## 設定ファイル差し替え
 box設定やAprilTag設定を差し替える場合:
 
