@@ -1,0 +1,35 @@
+<launch>
+  <arg name="camera" default="camera" />
+  <arg name="serial_no" default="" />
+  <arg name="device_type" default="" />
+  <arg name="color_width" default="-1" />
+  <arg name="color_height" default="-1" />
+  <arg name="color_fps" default="-1" />
+  <arg name="enable_depth" default="false" />
+  <arg name="box_config_file" default="$(find apriltag_box_detection)/config/box.yaml" />
+  <arg name="tag_settings_file" default="$(find apriltag_box_detection)/config/settings.yaml" />
+  <arg name="tag_config_file" default="$(find apriltag_box_detection)/config/tags.yaml" />
+  <arg name="overlay" default="true" />
+  <arg name="rviz" default="true" />
+
+  <include file="$(find realsense2_camera)/launch/rs_camera.launch">
+    <arg name="camera" value="$(arg camera)" />
+    <arg name="serial_no" value="$(arg serial_no)" />
+    <arg name="device_type" value="$(arg device_type)" />
+    <arg name="enable_color" value="true" />
+    <arg name="enable_depth" value="$(arg enable_depth)" />
+    <arg name="color_width" value="$(arg color_width)" />
+    <arg name="color_height" value="$(arg color_height)" />
+    <arg name="color_fps" value="$(arg color_fps)" />
+  </include>
+
+  <include file="$(find apriltag_box_detection)/launch/box_detection.launch">
+    <arg name="image_topic" value="/$(arg camera)/color/image_raw" />
+    <arg name="camera_info_topic" value="/$(arg camera)/color/camera_info" />
+    <arg name="box_config_file" value="$(arg box_config_file)" />
+    <arg name="tag_settings_file" value="$(arg tag_settings_file)" />
+    <arg name="tag_config_file" value="$(arg tag_config_file)" />
+    <arg name="overlay" value="$(arg overlay)" />
+    <arg name="rviz" value="$(arg rviz)" />
+  </include>
+</launch>

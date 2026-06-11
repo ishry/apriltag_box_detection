@@ -193,6 +193,52 @@ roslaunch apriltag_box_detection webcam_box_detection.launch \
 
 内部では `box_detection.launch` をincludeしている。
 
+## RealSense込みで起動
+`ros-noetic-realsense2-camera` を入れている場合は，RealSenseを起動してそのcolor画像をbox検出に渡せる。
+
+```bash
+sudo apt install ros-noetic-realsense2-camera
+roslaunch apriltag_box_detection realsense_box_detection.launch
+```
+
+内部では `realsense2_camera` の `rs_camera.launch` と，このパッケージの `box_detection.launch` をincludeしている。
+入力topicは標準のcolor streamを使う。
+
+```text
+/camera/color/image_raw
+/camera/color/camera_info
+```
+
+RealSense単体で確認する場合:
+
+```bash
+roslaunch realsense2_camera rs_camera.launch
+rqt_image_view
+# /camera/color/image_raw を選ぶ
+```
+
+PCの画面が勝手に回転する場合は，`iio-sensor-proxy` を無効化する。
+
+```bash
+sudo systemctl disable iio-sensor-proxy
+sudo systemctl stop iio-sensor-proxy
+```
+
+解像度やFPSを指定する例:
+
+```bash
+roslaunch apriltag_box_detection realsense_box_detection.launch \
+  color_width:=640 \
+  color_height:=480 \
+  color_fps:=30
+```
+
+複数台接続時などでcamera namespaceを変える場合:
+
+```bash
+roslaunch apriltag_box_detection realsense_box_detection.launch camera:=camera_1
+```
+
 ## 設定ファイル差し替え
 box設定やAprilTag設定を差し替える場合:
 
