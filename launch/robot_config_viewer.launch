@@ -1,0 +1,30 @@
+<launch>
+  <arg name="config_file" default="$(find apriltag_box_detection)/config/robot.yaml" />
+  <arg name="urdf_file" default="/home/leus/catkin_ws/manta_ws/src/manta_controller/manta_ros_bridge_tutorials/models/MANTA_HR_TAIL.urdf" />
+  <arg name="manta_package_root" default="/home/leus/catkin_ws/manta_ws/src/manta_controller" />
+  <arg name="root_frame" default="CHASSIS" />
+  <arg name="use_robot_model" default="true" />
+  <arg name="rviz" default="true" />
+
+  <env name="ROS_PACKAGE_PATH" value="$(arg manta_package_root):$(optenv ROS_PACKAGE_PATH)" />
+
+  <param if="$(arg use_robot_model)" name="robot_description" textfile="$(arg urdf_file)" />
+
+  <node if="$(arg use_robot_model)" pkg="joint_state_publisher" type="joint_state_publisher"
+        name="robot_config_joint_state_publisher" output="screen" />
+
+  <node if="$(arg use_robot_model)" pkg="robot_state_publisher" type="robot_state_publisher"
+        name="robot_config_robot_state_publisher" output="screen" />
+
+  <node if="$(arg use_robot_model)" pkg="tf" type="static_transform_publisher"
+        name="robot_config_root_tf"
+        args="0 0 0 0 0 0 robot_config $(arg root_frame) 100" />
+
+  <node pkg="apriltag_box_detection" type="robot_config_viewer.py"
+        name="robot_config_viewer" output="screen">
+    <param name="config_file" value="$(arg config_file)" />
+  </node>
+
+  <node if="$(arg rviz)" pkg="rviz" type="rviz" name="robot_config_viewer_rviz"
+        args="-d $(find apriltag_box_detection)/rviz/robot_config_viewer.rviz" />
+</launch>

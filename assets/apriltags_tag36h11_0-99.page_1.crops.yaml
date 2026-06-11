@@ -36,4 +36,10 @@ tags:
     y: 286
     width: 168
     height: 163
+- id: 6
+  rect:
+    x: 1481
+    y: 280
+    width: 165
+    height: 167
 page: 1

@@ -1,0 +1,17 @@
+frame_id: robot_config
+
+robot:
+  name: manta
+
+  tags:
+    - id: 6
+      size: 0.15
+      pose:
+        position:
+          x: 0.0
+          y: -0.4
+          z: 0.1
+        rotation:
+          roll: 1.57
+          pitch: 0.0
+          yaw: 0.0

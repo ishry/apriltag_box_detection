@@ -135,6 +135,56 @@ yaw: 面内回転[rad]
 
 `box.yaml`ではtag idだけを書く。`assets/meshes/tag_0.dae` のようなファイルがあれば，RViz表示では自動でそのdaeを使う。なければ黒い板として表示する。
 
+## robot設定表示
+ロボット原点とロボットに貼ったtagの位置関係は以下に書く。
+
+```text
+src/apriltag_box_detection/config/robot.yaml
+```
+
+例:
+
+```yaml
+frame_id: robot_config
+
+robot:
+  name: manta
+
+  tags:
+    - id: 0
+      size: 0.06
+      pose:
+        position:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+        rotation:
+          roll: 0.0
+          pitch: 0.0
+          yaw: 0.0
+```
+
+`tags[].pose` はロボット原点から見たtag座標系の位置姿勢を書く。ロボット本体は `MANTA_HR_TAIL.urdf` を `robot_description` として読み込み，RVizのRobotModelで表示する。
+
+別workspace内の `package://manta_ros_bridge_tutorials/...` meshを解決するため，launch内で `manta_package_root` を `ROS_PACKAGE_PATH` に追加している。環境全体でもmanta workspaceを見えるようにする場合は，起動前にsourceしておく。
+
+```bash
+source ~/catkin_ws/manta_ws/devel/setup.bash
+source ~/catkin_ws/apriltag_ws/devel/setup.bash
+```
+
+表示確認:
+
+```bash
+roslaunch apriltag_box_detection robot_config_viewer.launch
+```
+
+RVizなしでmarkerだけ出す場合:
+
+```bash
+roslaunch apriltag_box_detection robot_config_viewer.launch rviz:=false
+```
+
 ## AprilTag検出設定
 AprilTag検出ノードに渡す設定はこのパッケージ内に置いている。
 
