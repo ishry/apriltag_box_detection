@@ -2,13 +2,13 @@
 # All lengths are in meters.
 standalone_tags:
   [
-    {id: 0, size: 0.06},
-    {id: 1, size: 0.06},
-    {id: 2, size: 0.06},
-    {id: 3, size: 0.06},
-    {id: 4, size: 0.06},
-    {id: 5, size: 0.06},
-    {id: 6, size: 0.15}
+    {id: 0, size: 0.057},
+    {id: 1, size: 0.057},
+    {id: 2, size: 0.057},
+    {id: 3, size: 0.057},
+    {id: 4, size: 0.057},
+    {id: 5, size: 0.057},
+    {id: 6, size: 0.142}
   ]
 
 tag_bundles:

@@ -2,6 +2,7 @@
   <arg name="image_topic" default="/usb_cam/image_raw" />
   <arg name="camera_info_topic" default="/usb_cam/camera_info" />
   <arg name="box_config_file" default="$(find apriltag_box_detection)/config/box.yaml" />
+  <arg name="robot_config_file" default="$(find apriltag_box_detection)/config/robot.yaml" />
   <arg name="tag_settings_file" default="$(find apriltag_box_detection)/config/settings.yaml" />
   <arg name="tag_config_file" default="$(find apriltag_box_detection)/config/tags.yaml" />
   <arg name="overlay" default="true" />
@@ -28,8 +29,11 @@
   <node if="$(arg overlay)" pkg="apriltag_box_detection" type="box_image_overlay.py"
         name="box_image_overlay" output="screen">
     <param name="config_file" value="$(arg box_config_file)" />
+    <param name="robot_config_file" value="$(arg robot_config_file)" />
+    <param name="tag_config_file" value="$(arg tag_config_file)" />
     <remap from="image" to="$(arg image_topic)" />
     <remap from="camera_info" to="$(arg camera_info_topic)" />
+    <remap from="tag_detections" to="/tag_detections" />
     <remap from="box_pose" to="/box_pose" />
     <remap from="box_detection_image" to="/box_detection_image" />
   </node>

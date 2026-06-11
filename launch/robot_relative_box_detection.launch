@@ -28,6 +28,7 @@
     <arg name="image_topic" value="$(arg image_topic)" />
     <arg name="camera_info_topic" value="$(arg camera_info_topic)" />
     <arg name="box_config_file" value="$(arg box_config_file)" />
+    <arg name="robot_config_file" value="$(arg robot_config_file)" />
     <arg name="tag_settings_file" value="$(arg tag_settings_file)" />
     <arg name="tag_config_file" value="$(arg tag_config_file)" />
     <arg name="overlay" value="$(arg overlay)" />
@@ -37,6 +38,7 @@
   <node pkg="apriltag_box_detection" type="robot_config_viewer.py"
         name="robot_config_viewer" output="screen">
     <param name="config_file" value="$(arg robot_config_file)" />
+    <param name="tag_config_file" value="$(arg tag_config_file)" />
   </node>
 
   <node pkg="apriltag_box_detection" type="robot_relative_box_pose_estimator.py"

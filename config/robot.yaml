@@ -5,7 +5,6 @@ robot:
 
   tags:
     - id: 6
-      size: 0.15
       pose:
         position:
           x: 0.0

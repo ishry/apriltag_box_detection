@@ -176,7 +176,13 @@ def add_tag_marker(markers, frame_id, marker_id, position, quaternion, tag_size,
     markers.markers.append(marker)
 
 
-def build_markers(config, package_path):
+def tag_size_from_config(tag_sizes, tag_id):
+    if tag_id not in tag_sizes:
+        raise ValueError("tag id %s has no size in tag config" % tag_id)
+    return tag_sizes[tag_id]
+
+
+def build_markers(config, package_path, tag_sizes):
     frame_id = config.get("frame_id", "box_config")
     markers = MarkerArray()
     marker_id = 0
@@ -213,9 +219,10 @@ def build_markers(config, package_path):
 
         for tag in box.get("tags", []):
             position, quaternion, tag_x, tag_y, tag_z = tag_pose(box, tag)
-            tag_size = float(tag["size"])
+            tag_id = int(tag["id"])
+            tag_size = tag_size_from_config(tag_sizes, tag_id)
 
-            mesh_resource = tag_mesh_path(package_path, tag["id"])
+            mesh_resource = tag_mesh_path(package_path, tag_id)
             add_tag_marker(markers, frame_id, marker_id, position, quaternion, tag_size, mesh_resource)
             marker_id += 1
 
@@ -225,7 +232,7 @@ def build_markers(config, package_path):
             set_pose(text, text_pos, (0.0, 0.0, 0.0, 1.0))
             text.scale.z = 0.025
             text.color = color_msg(1.0, 1.0, 1.0, 1.0)
-            text.text = "tag %s" % tag["id"]
+            text.text = "tag %s" % tag_id
             markers.markers.append(text)
 
             axis_length = max(tag_size * 0.8, 0.04)
@@ -247,26 +254,43 @@ def load_config(path):
     return config
 
 
+def load_tag_sizes(path):
+    config = load_config(path)
+    tag_sizes = {}
+    for tag in config.get("standalone_tags", []):
+        tag_id = int(tag["id"])
+        tag_sizes[tag_id] = float(tag["size"])
+    return tag_sizes
+
+
 def default_config_path():
     package_path = rospkg.RosPack().get_path("apriltag_box_detection")
     return package_path + "/config/box.yaml"
 
 
+def default_tag_config_path():
+    package_path = rospkg.RosPack().get_path("apriltag_box_detection")
+    return package_path + "/config/tags.yaml"
+
+
 def main():
     rospy.init_node("box_config_viewer")
     config_file = rospy.get_param("~config_file", default_config_path())
+    tag_config_file = rospy.get_param("~tag_config_file", default_tag_config_path())
     publish_rate = float(rospy.get_param("~publish_rate", 1.0))
     publisher = rospy.Publisher("box_config_markers", MarkerArray, queue_size=1, latch=True)
     package_path = rospkg.RosPack().get_path("apriltag_box_detection")
 
     try:
         config = load_config(config_file)
-        markers = build_markers(config, package_path)
+        tag_sizes = load_tag_sizes(tag_config_file)
+        markers = build_markers(config, package_path, tag_sizes)
     except Exception as error:
         rospy.logerr("failed to load box config '%s': %s", config_file, error)
         raise
 
     rospy.loginfo("loaded box config: %s", config_file)
+    rospy.loginfo("loaded tag config: %s", tag_config_file)
     rate = rospy.Rate(publish_rate)
     while not rospy.is_shutdown():
         now = rospy.Time.now()

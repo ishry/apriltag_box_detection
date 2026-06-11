@@ -98,7 +98,6 @@ boxes:
 
     tags:
       - id: 0
-        size: 0.054
         face: 0
         offset:
           u: -0.03
@@ -152,7 +151,6 @@ robot:
 
   tags:
     - id: 6
-      size: 0.15
       pose:
         position:
           x: 0.0
@@ -164,7 +162,7 @@ robot:
           yaw: 0.0
 ```
 
-`tags[].pose` はロボット原点から見たtag座標系の位置姿勢を書く。ロボット本体は `MANTA_HR_TAIL.urdf` を `robot_description` として読み込み，RVizのRobotModelで表示する。
+`tags[].pose` はロボット原点から見たtag座標系の位置姿勢を書く。tagの実寸は `tags.yaml` に書く。ロボット本体は `MANTA_HR_TAIL.urdf` を `robot_description` として読み込み，RVizのRobotModelで表示する。
 
 別workspace内の `package://manta_ros_bridge_tutorials/...` meshを解決するため，launch内で `manta_package_root` を `ROS_PACKAGE_PATH` に追加している。環境全体でもmanta workspaceを見えるようにする場合は，起動前にsourceしておく。
 
@@ -223,7 +221,7 @@ src/apriltag_box_detection/config/settings.yaml
 src/apriltag_box_detection/config/tags.yaml
 ```
 
-`tags.yaml` には検出したいtag idとサイズを書く。今はbox用 `id 0-5` を `0.06m`，robot用 `id 6` を `0.15m` として登録している。
+`tags.yaml` には検出したいtag idと実寸を書く。今はbox用 `id 0-5` を `0.057m`，robot用 `id 6` を `0.142m` として登録している。boxやrobotの設定ではtag idと配置だけを書き，tag sizeはここに集約する。
 
 ## RVizで確認
 ```bash

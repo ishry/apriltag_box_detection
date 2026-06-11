@@ -1,10 +1,12 @@
 <launch>
   <arg name="config_file" default="$(find apriltag_box_detection)/config/box.yaml" />
+  <arg name="tag_config_file" default="$(find apriltag_box_detection)/config/tags.yaml" />
   <arg name="rviz" default="true" />
 
   <node pkg="apriltag_box_detection" type="box_config_viewer.py"
         name="box_config_viewer" output="screen">
     <param name="config_file" value="$(arg config_file)" />
+    <param name="tag_config_file" value="$(arg tag_config_file)" />
   </node>
 
   <node if="$(arg rviz)" pkg="rviz" type="rviz" name="box_config_viewer_rviz"

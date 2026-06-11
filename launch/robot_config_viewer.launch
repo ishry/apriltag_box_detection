@@ -1,5 +1,6 @@
 <launch>
   <arg name="config_file" default="$(find apriltag_box_detection)/config/robot.yaml" />
+  <arg name="tag_config_file" default="$(find apriltag_box_detection)/config/tags.yaml" />
   <arg name="urdf_file" default="/home/leus/catkin_ws/manta_ws/src/manta_controller/manta_ros_bridge_tutorials/models/MANTA_HR_TAIL.urdf" />
   <arg name="manta_package_root" default="/home/leus/catkin_ws/manta_ws/src/manta_controller" />
   <arg name="root_frame" default="CHASSIS" />
@@ -23,6 +24,7 @@
   <node pkg="apriltag_box_detection" type="robot_config_viewer.py"
         name="robot_config_viewer" output="screen">
     <param name="config_file" value="$(arg config_file)" />
+    <param name="tag_config_file" value="$(arg tag_config_file)" />
   </node>
 
   <node if="$(arg rviz)" pkg="rviz" type="rviz" name="robot_config_viewer_rviz"

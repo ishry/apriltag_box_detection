@@ -7,6 +7,7 @@ import cv2
 import rospy
 import rospkg
 import yaml
+from apriltag_ros.msg import AprilTagDetectionArray
 from cv_bridge import CvBridge
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import CameraInfo, Image
@@ -85,29 +86,66 @@ def default_config_path():
     return os.path.join(package_path, "config", "box.yaml")
 
 
+def default_robot_config_path():
+    package_path = rospkg.RosPack().get_path("apriltag_box_detection")
+    return os.path.join(package_path, "config", "robot.yaml")
+
+
+def default_tag_config_path():
+    package_path = rospkg.RosPack().get_path("apriltag_box_detection")
+    return os.path.join(package_path, "config", "tags.yaml")
+
+
 class BoxImageOverlay:
     def __init__(self):
         config_file = rospy.get_param("~config_file", default_config_path())
+        robot_config_file = rospy.get_param("~robot_config_file", default_robot_config_path())
+        tag_config_file = rospy.get_param("~tag_config_file", default_tag_config_path())
         self.config = load_config(config_file)
+        self.robot_config = load_config(robot_config_file)
+        self.tag_sizes = self.load_tag_sizes(tag_config_file)
         self.box = self.config.get("boxes", [])[0]
         self.box_name = self.box.get("name", "box")
         self.box_size = self.box["size"]
+        self.robot_tag_ids = self.build_robot_tag_ids(self.robot_config)
         self.max_pose_age = float(rospy.get_param("~max_pose_age", 0.5))
         self.bridge = CvBridge()
         self.camera_info = None
         self.box_pose = None
+        self.tag_detections = None
 
         self.image_pub = rospy.Publisher("box_detection_image", Image, queue_size=1)
         self.info_sub = rospy.Subscriber("camera_info", CameraInfo, self.on_camera_info, queue_size=1)
         self.pose_sub = rospy.Subscriber("box_pose", PoseStamped, self.on_box_pose, queue_size=1)
+        self.tag_sub = rospy.Subscriber("tag_detections", AprilTagDetectionArray, self.on_tag_detections, queue_size=1)
         self.image_sub = rospy.Subscriber("image", Image, self.on_image, queue_size=1)
         rospy.loginfo("loaded box overlay config: %s", config_file)
+        rospy.loginfo("loaded robot overlay config: %s", robot_config_file)
+        rospy.loginfo("loaded tag overlay config: %s", tag_config_file)
+
+    def build_robot_tag_ids(self, config):
+        tag_ids = set()
+        robot = config.get("robot", {})
+        for tag in robot.get("tags", []):
+            tag_ids.add(int(tag["id"]))
+        return tag_ids
+
+    def load_tag_sizes(self, path):
+        config = load_config(path)
+        tag_sizes = {}
+        for tag in config.get("standalone_tags", []):
+            tag_id = int(tag["id"])
+            tag_sizes[tag_id] = float(tag["size"])
+        return tag_sizes
 
     def on_camera_info(self, msg):
         self.camera_info = msg
 
     def on_box_pose(self, msg):
         self.box_pose = msg
+
+    def on_tag_detections(self, msg):
+        self.tag_detections = msg
 
     def on_image(self, msg):
         try:
@@ -121,6 +159,9 @@ class BoxImageOverlay:
             self.draw_box(output, msg.header.stamp)
         else:
             cv2.putText(output, "no fresh box pose", (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 180, 255), 2)
+
+        if self.camera_info and self.tag_detections and self.pose_is_fresh(msg.header.stamp, self.tag_detections.header.stamp):
+            self.draw_robot_tags(output)
 
         out_msg = self.bridge.cv2_to_imgmsg(output, encoding="bgr8")
         out_msg.header = msg.header
@@ -165,6 +206,42 @@ class BoxImageOverlay:
                 continue
             cv2.line(image, center, pixel, color, 3, cv2.LINE_AA)
             cv2.putText(image, label, (pixel[0] + 4, pixel[1] - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
+
+    def draw_robot_tags(self, image):
+        for detection in self.tag_detections.detections:
+            if not detection.id:
+                continue
+            tag_id = int(detection.id[0])
+            if tag_id not in self.robot_tag_ids:
+                continue
+
+            tag_size = self.tag_sizes.get(tag_id)
+            if detection.size:
+                tag_size = float(detection.size[0])
+            if tag_size is None:
+                rospy.logwarn_throttle(2.0, "tag id %s has no size in tag config", tag_id)
+                continue
+
+            transform = pose_to_transform(detection.pose.pose.pose)
+            half = tag_size / 2.0
+            corners = [
+                (-half, -half, 0.0),
+                (half, -half, 0.0),
+                (half, half, 0.0),
+                (-half, half, 0.0),
+            ]
+            pixels = [self.project(transform_point(transform, corner)) for corner in corners]
+            if any(pixel is None for pixel in pixels):
+                continue
+
+            color = (0, 255, 255)
+            for index in range(4):
+                cv2.line(image, pixels[index], pixels[(index + 1) % 4], color, 2, cv2.LINE_AA)
+
+            center = self.project((transform[0][3], transform[1][3], transform[2][3]))
+            if center:
+                cv2.circle(image, center, 4, color, -1)
+                cv2.putText(image, "robot tag %s" % tag_id, (center[0] + 8, center[1] - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
 
     def project(self, point):
         x, y, z = point
