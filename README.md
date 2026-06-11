@@ -258,6 +258,11 @@ roslaunch apriltag_box_detection realsense_box_detection.launch \
   color_fps:=30
 ```
 
+注意:
+- RealSenseの起動条件は，まず `roslaunch realsense2_camera rs_camera.launch` のデフォルト設定に合わせる。
+- `color_width` / `color_height` / `color_fps` の固定，`enable_depth`，`enable_confidence`，`publish_tf` などをデフォルトから変えると，RealSense driver側のstream構成やprofile選択が変わって大きな遅延が出ることがある。
+- カメラ単体で軽いのに検出込みで重い場合は，検出ノードより先にRealSenseの起動設定差を疑う。
+
 複数台接続時などでcamera namespaceを変える場合:
 
 ```bash
