@@ -18,23 +18,17 @@
     <rosparam command="load" file="$(arg tag_config_file)" />
   </node>
 
-  <node pkg="apriltag_box_detection" type="box_pose_estimator.py"
-        name="box_pose_estimator" output="screen">
-    <param name="config_file" value="$(arg box_config_file)" />
-    <remap from="tag_detections" to="/tag_detections" />
-    <remap from="box_pose" to="/box_pose" />
-    <remap from="box_detection_markers" to="/box_detection_markers" />
-  </node>
-
-  <node if="$(arg overlay)" pkg="apriltag_box_detection" type="box_image_overlay.py"
-        name="box_image_overlay" output="screen">
+  <node pkg="apriltag_box_detection" type="box_image_overlay.py"
+        name="box_detection_node" output="screen">
     <param name="config_file" value="$(arg box_config_file)" />
     <param name="robot_config_file" value="$(arg robot_config_file)" />
     <param name="tag_config_file" value="$(arg tag_config_file)" />
-    <remap from="image" to="$(arg image_topic)" />
+    <param name="overlay" value="$(arg overlay)" />
     <remap from="camera_info" to="$(arg camera_info_topic)" />
     <remap from="tag_detections" to="/tag_detections" />
+    <remap from="tag_detections_image" to="/tag_detections_image" />
     <remap from="box_pose" to="/box_pose" />
+    <remap from="box_detection_markers" to="/box_detection_markers" />
     <remap from="box_detection_image" to="/box_detection_image" />
   </node>
 

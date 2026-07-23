@@ -2,14 +2,22 @@
 
 import math
 import os
+import sys
+import threading
+from collections import OrderedDict
 
 import cv2
 import rospy
 import rospkg
 import yaml
 from apriltag_ros.msg import AprilTagDetectionArray
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
+from box_pose_estimator import BoxPoseEstimator
 from cv_bridge import CvBridge
-from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import CameraInfo, Image
 
 
@@ -96,7 +104,7 @@ def default_tag_config_path():
     return os.path.join(package_path, "config", "tags.yaml")
 
 
-class BoxImageOverlay:
+class BoxDetectionNode:
     def __init__(self):
         config_file = rospy.get_param("~config_file", default_config_path())
         robot_config_file = rospy.get_param("~robot_config_file", default_robot_config_path())
@@ -104,24 +112,51 @@ class BoxImageOverlay:
         self.config = load_config(config_file)
         self.robot_config = load_config(robot_config_file)
         self.tag_sizes = self.load_tag_sizes(tag_config_file)
-        self.box = self.config.get("boxes", [])[0]
-        self.box_name = self.box.get("name", "box")
-        self.box_size = self.box["size"]
         self.robot_tag_ids = self.build_robot_tag_ids(self.robot_config)
-        self.max_pose_age = float(rospy.get_param("~max_pose_age", 0.5))
+        self.sync_queue_size = max(1, int(rospy.get_param("~sync_queue_size", 15)))
+        self.input_queue_size = max(1, int(rospy.get_param("~queue_size", 10)))
+        self.overlay_enabled = bool(rospy.get_param("~overlay", True))
         self.bridge = CvBridge()
+        self.pose_estimator = BoxPoseEstimator(subscribe=False)
         self.camera_info = None
-        self.box_pose = None
-        self.tag_detections = None
+        self.sync_lock = threading.Lock()
+        self.render_lock = threading.Lock()
+        self.images = OrderedDict()
+        self.detection_results = OrderedDict()
 
-        self.image_pub = rospy.Publisher("box_detection_image", Image, queue_size=1)
-        self.info_sub = rospy.Subscriber("camera_info", CameraInfo, self.on_camera_info, queue_size=1)
-        self.pose_sub = rospy.Subscriber("box_pose", PoseStamped, self.on_box_pose, queue_size=1)
-        self.tag_sub = rospy.Subscriber("tag_detections", AprilTagDetectionArray, self.on_tag_detections, queue_size=1)
-        self.image_sub = rospy.Subscriber("image", Image, self.on_image, queue_size=1)
+        self.image_pub = None
+        self.info_sub = None
+        self.image_sub = None
+        self.tag_sub = rospy.Subscriber(
+            "tag_detections",
+            AprilTagDetectionArray,
+            self.on_tag_detections,
+            queue_size=self.input_queue_size,
+        )
+        if self.overlay_enabled:
+            self.image_pub = rospy.Publisher("box_detection_image", Image, queue_size=1)
+            self.info_sub = rospy.Subscriber(
+                "camera_info",
+                CameraInfo,
+                self.on_camera_info,
+                queue_size=1,
+            )
+            self.image_sub = rospy.Subscriber(
+                "tag_detections_image",
+                Image,
+                self.on_image,
+                queue_size=self.input_queue_size,
+            )
         rospy.loginfo("loaded box overlay config: %s", config_file)
         rospy.loginfo("loaded robot overlay config: %s", robot_config_file)
         rospy.loginfo("loaded tag overlay config: %s", tag_config_file)
+        if self.overlay_enabled:
+            rospy.loginfo(
+                "synchronizing tag detections and detection images by exact header stamp with queue size %d",
+                self.sync_queue_size,
+            )
+        else:
+            rospy.loginfo("box image overlay disabled; box pose and marker outputs remain enabled")
 
     def build_robot_tag_ids(self, config):
         tag_ids = set()
@@ -141,40 +176,65 @@ class BoxImageOverlay:
     def on_camera_info(self, msg):
         self.camera_info = msg
 
-    def on_box_pose(self, msg):
-        self.box_pose = msg
-
     def on_tag_detections(self, msg):
-        self.tag_detections = msg
-
-    def on_image(self, msg):
-        try:
-            image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
-        except Exception as error:
-            rospy.logwarn_throttle(2.0, "failed to convert image: %s", error)
+        box_result = self.pose_estimator.on_detections(msg)
+        if not self.overlay_enabled:
             return
 
-        output = image.copy()
-        if self.camera_info and self.box_pose and self.pose_is_fresh(msg.header.stamp, self.box_pose.header.stamp):
-            self.draw_box(output, msg.header.stamp)
-        else:
-            cv2.putText(output, "no fresh box pose", (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 180, 255), 2)
+        synced = self.store_and_take_synced(
+            self.detection_results,
+            msg.header.stamp,
+            (msg, box_result),
+        )
+        if synced:
+            self.publish_synced_image(*synced)
 
-        if self.camera_info and self.tag_detections and self.pose_is_fresh(msg.header.stamp, self.tag_detections.header.stamp):
-            self.draw_robot_tags(output)
+    def on_image(self, msg):
+        synced = self.store_and_take_synced(self.images, msg.header.stamp, msg)
+        if synced:
+            self.publish_synced_image(*synced)
 
-        out_msg = self.bridge.cv2_to_imgmsg(output, encoding="bgr8")
-        out_msg.header = msg.header
-        self.image_pub.publish(out_msg)
+    def store_and_take_synced(self, messages, header_stamp, value):
+        stamp = header_stamp.to_nsec()
+        with self.sync_lock:
+            messages[stamp] = value
+            messages.move_to_end(stamp)
+            while len(messages) > self.sync_queue_size:
+                messages.popitem(last=False)
 
-    def pose_is_fresh(self, image_stamp, pose_stamp):
-        if pose_stamp == rospy.Time(0) or image_stamp == rospy.Time(0):
-            return True
-        return abs((image_stamp - pose_stamp).to_sec()) <= self.max_pose_age
+            if stamp not in self.images or stamp not in self.detection_results:
+                return None
 
-    def draw_box(self, image, stamp):
-        transform = pose_to_transform(self.box_pose.pose)
-        corners = [transform_point(transform, corner) for corner in self.box_corners()]
+            tag_detections, box_result = self.detection_results.pop(stamp)
+            return (
+                self.images.pop(stamp),
+                tag_detections,
+                box_result,
+            )
+
+    def publish_synced_image(self, image_msg, tag_detections, box_result):
+        with self.render_lock:
+            try:
+                image = self.bridge.imgmsg_to_cv2(image_msg, desired_encoding="bgr8")
+            except Exception as error:
+                rospy.logwarn_throttle(2.0, "failed to convert image: %s", error)
+                return
+
+            output = image.copy()
+            if self.camera_info:
+                if box_result is not None:
+                    camera_box, box, source_tag_id = box_result
+                    self.draw_box(output, camera_box, box, source_tag_id)
+                self.draw_robot_tags(output, tag_detections)
+            else:
+                cv2.putText(output, "no camera info", (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 180, 255), 2)
+
+            out_msg = self.bridge.cv2_to_imgmsg(output, encoding="bgr8")
+            out_msg.header = image_msg.header
+            self.image_pub.publish(out_msg)
+
+    def draw_box(self, image, transform, box, source_tag_id):
+        corners = [transform_point(transform, corner) for corner in self.box_corners(box)]
         pixels = [self.project(point) for point in corners]
 
         for edge, color in BOX_EDGES:
@@ -186,13 +246,14 @@ class BoxImageOverlay:
         center = self.project((transform[0][3], transform[1][3], transform[2][3]))
         if center:
             cv2.circle(image, center, 4, (0, 0, 255), -1)
-            cv2.putText(image, self.box_name, (center[0] + 8, center[1] - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-            self.draw_axes(image, transform, center)
+            label = "%s from tag %s" % (box.get("name", "box"), source_tag_id)
+            cv2.putText(image, label, (center[0] + 8, center[1] - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            self.draw_axes(image, transform, center, box)
 
-    def draw_axes(self, image, transform, center):
-        sx = float(self.box_size["x"])
-        sy = float(self.box_size["y"])
-        sz = float(self.box_size["z"])
+    def draw_axes(self, image, transform, center, box):
+        sx = float(box["size"]["x"])
+        sy = float(box["size"]["y"])
+        sz = float(box["size"]["z"])
         axis_length = max(min(sx, sy, sz) * 0.8, 0.04)
 
         for label, axis, color in BOX_AXES:
@@ -207,8 +268,8 @@ class BoxImageOverlay:
             cv2.line(image, center, pixel, color, 3, cv2.LINE_AA)
             cv2.putText(image, label, (pixel[0] + 4, pixel[1] - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
 
-    def draw_robot_tags(self, image):
-        for detection in self.tag_detections.detections:
+    def draw_robot_tags(self, image, tag_detections):
+        for detection in tag_detections.detections:
             if not detection.id:
                 continue
             tag_id = int(detection.id[0])
@@ -259,10 +320,10 @@ class BoxImageOverlay:
         v = int(round((fy * y / z) + cy))
         return (u, v)
 
-    def box_corners(self):
-        sx = float(self.box_size["x"])
-        sy = float(self.box_size["y"])
-        sz = float(self.box_size["z"])
+    def box_corners(self, box):
+        sx = float(box["size"]["x"])
+        sy = float(box["size"]["y"])
+        sz = float(box["size"]["z"])
         hx = sx / 2.0
         hy = sy / 2.0
         hz = sz / 2.0
@@ -279,8 +340,8 @@ class BoxImageOverlay:
 
 
 def main():
-    rospy.init_node("box_image_overlay")
-    BoxImageOverlay()
+    rospy.init_node("box_detection_node")
+    BoxDetectionNode()
     rospy.spin()
 
 

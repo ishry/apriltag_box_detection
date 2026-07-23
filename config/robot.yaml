@@ -7,10 +7,10 @@ robot:
     - id: 6
       pose:
         position:
-          x: 0.0
-          y: -0.4
-          z: 0.1
+          x: -0.4
+          y: 0.4
+          z: 0.0
         rotation:
-          roll: 1.57
+          roll: 0.0
           pitch: 0.0
           yaw: 0.0

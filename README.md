@@ -1,11 +1,13 @@
 # apriltag_box_detection
-AprilTagが貼られたboxの設定と表示確認をするROS1用パッケージ
+
+AprilTagを貼ったboxの姿勢推定，画像・RViz表示，robot相対姿勢への変換を行うROS 1パッケージ．
 
 # 環境
-- Ubuntu 20.04
-- ROS Noetic
-- RViz
-- Python3
+
+- Ubuntu 20.04．
+- ROS Noetic．
+- RViz．
+- Python 3．
 
 # 環境構築メモ
 
@@ -15,7 +17,7 @@ AprilTagが貼られたboxの設定と表示確認をするROS1用パッケー�
 sudo apt install ros-noetic-usb-cam ros-noetic-camera-calibration ros-noetic-realsense2-camera python3-catkin-tools python3-pil python3-tk python3-yaml poppler-utils
 ```
 
-## apriltag / apriltag_ros / このパッケージの導入
+## パッケージの導入
 
 ```bash
 mkdir -p ~/catkin_ws/apriltag_ws/src
@@ -31,7 +33,7 @@ catkin build
 source devel/setup.bash
 ```
 
-- 新しいterminalを開いたときに毎回使う場合は，以下を `~/.bashrc` に追加する。
+新しいterminalでもworkspaceを使用する場合は，以下を `~/.bashrc` に追加する．
 
 ```bash
 source ~/catkin_ws/apriltag_ws/devel/setup.bash
@@ -39,8 +41,11 @@ source ~/catkin_ws/apriltag_ws/devel/setup.bash
 
 # 使い方
 
-## tag画像とdaeの生成
-- 複数のAprilTagが入った画像またはPDFから，tagごとの画像とdaeを生成生成できる．
+## 1. 準備
+
+### tag画像とdaeの生成
+
+RViz表示に使うtag画像とdae meshを生成する．入力には，複数のAprilTagを含む画像またはPDFを指定できる．
 
 ```bash
 cd ~/catkin_ws/apriltag_ws
@@ -48,7 +53,7 @@ python3 src/apriltag_box_detection/scripts/generate_tag_meshes.py \
   --source src/apriltag_box_detection/assets/apriltags.pdf
 ```
 
-PDFのページを指定する場合:
+PDFのページと解像度を指定する場合：
 
 ```bash
 python3 src/apriltag_box_detection/scripts/generate_tag_meshes.py \
@@ -57,34 +62,48 @@ python3 src/apriltag_box_detection/scripts/generate_tag_meshes.py \
   --dpi 300
 ```
 
-GUIでやること:
-- tagの外枠をドラッグして矩形選択する
-- 右側のTag IDに番号を入れる
-- Add / Updateを押す
-- 必要なtag分だけ繰り返す
-- Generateを押す
+起動したGUIで以下を行う．
 
-生成されるファイル:
+1. tagの外枠をドラッグして選択する．
+2. `Tag ID`を入力する．
+3. `Add / Update`を押す．
+4. 必要なtagについて繰り返す．
+5. `Generate`を押す．
+
+生成物：
 
 ```text
 src/apriltag_box_detection/assets/tags/tag_0.png
 src/apriltag_box_detection/assets/meshes/tag_0.dae
 ```
 
-切り抜き情報はsourceの横に保存される。
+切り抜き情報は入力ファイルと同じdirectoryに保存される．
 
 ```text
 src/apriltag_box_detection/assets/apriltags.page_1.crops.yaml
 ```
 
-## box設定
-boxとtagの位置関係は以下に書く。
+### tagと検出精度の設定
+
+```text
+src/apriltag_box_detection/config/settings.yaml
+src/apriltag_box_detection/config/tags.yaml
+```
+
+- `settings.yaml`：tag family，thread数，decimateなどの検出設定．
+- `tags.yaml`：検出するtag IDと実寸．
+
+`tags.yaml`の`size`には，印刷余白を含めず，黒い正方形の外辺間の長さをm単位で指定する．tag sizeはこのファイルに集約し，box・robot設定にはIDと配置だけを書く．
+
+### box設定
+
+boxの寸法と，各tagの配置を`box.yaml`に記述する．
 
 ```text
 src/apriltag_box_detection/config/box.yaml
 ```
 
-例:
+設定例：
 
 ```yaml
 frame_id: box_config
@@ -107,7 +126,7 @@ boxes:
           yaw: 0.0
 ```
 
-face番号:
+`face`番号：
 
 ```text
 0: +X
@@ -118,7 +137,7 @@ face番号:
 5: -Z
 ```
 
-offsetの意味:
+`offset`：
 
 ```text
 u: 面内の横方向オフセット[m]
@@ -126,22 +145,38 @@ v: 面内の縦方向オフセット[m]
 normal: 面から外側に浮かせる距離[m]
 ```
 
-rotation:
+`rotation`：
 
 ```text
 yaw: 面内回転[rad]
 ```
 
-`box.yaml`ではtag idだけを書く。`assets/meshes/tag_0.dae` のようなファイルがあれば，RViz表示では自動でそのdaeを使う。なければ黒い板として表示する。
+`assets/meshes/tag_<id>.dae`が存在する場合，RVizではそのmeshを使用する．存在しない場合は黒い板として表示する．
 
-## robot設定表示
-ロボット原点とロボットに貼ったtagの位置関係は以下に書く。
+boxとtagの配置をRVizで確認する：
+
+```bash
+cd ~/catkin_ws/apriltag_ws
+catkin build
+source devel/setup.bash
+roslaunch apriltag_box_detection box_config_viewer.launch
+```
+
+RVizを起動せずmarkerだけpublishする場合：
+
+```bash
+roslaunch apriltag_box_detection box_config_viewer.launch rviz:=false
+```
+
+### robot設定
+
+robot原点から見たrobotタグの位置・姿勢を`robot.yaml`に記述する．
 
 ```text
 src/apriltag_box_detection/config/robot.yaml
 ```
 
-例:
+設定例：
 
 ```yaml
 frame_id: robot_config
@@ -162,106 +197,42 @@ robot:
           yaw: 0.0
 ```
 
-`tags[].pose` はロボット原点から見たtag座標系の位置姿勢を書く。tagの実寸は `tags.yaml` に書く。ロボット本体は `MANTA_HR_TAIL.urdf` を `robot_description` として読み込み，RVizのRobotModelで表示する。
+`tags[].pose`には，robot原点から見たtag座標系の位置・姿勢を指定する．tagの実寸は`tags.yaml`に記述する．
 
-別workspace内の `package://manta_ros_bridge_tutorials/...` meshを解決するため，launch内で `manta_package_root` を `ROS_PACKAGE_PATH` に追加している。環境全体でもmanta workspaceを見えるようにする場合は，起動前にsourceしておく。
+robot本体は`MANTA_HR_TAIL.urdf`を`robot_description`として読み込み，RVizのRobotModelで表示する．別workspaceにある`package://manta_ros_bridge_tutorials/...`のmeshを解決するため，launch内で`manta_package_root`を`ROS_PACKAGE_PATH`へ追加している．環境全体からmanta workspaceを参照する場合は，起動前にsourceする．
 
 ```bash
 source ~/catkin_ws/manta_ws/devel/setup.bash
 source ~/catkin_ws/apriltag_ws/devel/setup.bash
 ```
 
-表示確認:
+robot modelとtag配置をRVizで確認する：
 
 ```bash
 roslaunch apriltag_box_detection robot_config_viewer.launch
 ```
 
-RVizなしでmarkerだけ出す場合:
+RVizを起動せずmarkerだけpublishする場合：
 
 ```bash
 roslaunch apriltag_box_detection robot_config_viewer.launch rviz:=false
 ```
 
-## robot相対box推定
-ロボットtagが見えているときに `camera -> robot` を更新し，既存の `/box_pose` を `robot_config` 座標へ変換してpublishする。
+## 2. 実行
+
+用途に応じて以下のlaunchを使う．
 
 ```text
-/robot_relative_box_pose
-/robot_relative_box_markers
+box_detection.launch
+├─ webcam_box_detection.launch
+├─ realsense_box_detection.launch
+└─ robot_relative_box_detection.launch
+      └─ realsense_robot_relative_box_detection.launch
 ```
 
-ロボットtagが一度見えた後にロストした場合は，最後に見えていた `camera -> robot` を保持して使う。まだ一度もロボットtagが見えていない場合はpublishしない。
+### 2.1 通常のbox検出
 
-```bash
-roslaunch apriltag_box_detection robot_relative_box_detection.launch \
-  image_topic:=/usb_cam/image_raw \
-  camera_info_topic:=/usb_cam/camera_info
-```
-
-RealSenseなど別camera topicを使う場合:
-
-```bash
-roslaunch apriltag_box_detection robot_relative_box_detection.launch \
-  image_topic:=/camera/color/image_raw \
-  camera_info_topic:=/camera/color/camera_info
-```
-
-RealSense起動も含めて一括で動かす場合:
-
-```bash
-roslaunch apriltag_box_detection realsense_robot_relative_box_detection.launch
-```
-
-## AprilTag検出設定
-AprilTag検出ノードに渡す設定はこのパッケージ内に置いている。
-
-```text
-src/apriltag_box_detection/config/settings.yaml
-src/apriltag_box_detection/config/tags.yaml
-```
-
-`tags.yaml` には検出したいtag idと実寸を書く。今はbox用 `id 0-5` を `0.057m`，robot用 `id 6` を `0.142m` として登録している。boxやrobotの設定ではtag idと配置だけを書き，tag sizeはここに集約する。
-
-## RVizで確認
-```bash
-cd ~/catkin_ws/apriltag_ws
-catkin build
-source devel/setup.bash
-roslaunch apriltag_box_detection box_config_viewer.launch
-```
-
-表示されるもの:
-- box本体
-- face番号
-- tag画像または黒い板
-- tag id
-- tag座標軸
-
-RVizなしでmarkerだけ出す場合:
-
-```bash
-roslaunch apriltag_box_detection box_config_viewer.launch rviz:=false
-```
-
-## 任意カメラ + AprilTag + box推定
-このlaunchはカメラを起動しない。既に出ている画像topicとcamera_info topicを使って，AprilTag検出とbox姿勢推定を起動する。
-
-```bash
-roslaunch apriltag_box_detection box_detection.launch \
-  image_topic:=/usb_cam/image_raw \
-  camera_info_topic:=/usb_cam/camera_info
-```
-
-RealSenseなど別カメラでも，画像topicとcamera_info topicを指定すればよい。
-
-```bash
-roslaunch apriltag_box_detection box_detection.launch \
-  image_topic:=/camera/color/image_raw \
-  camera_info_topic:=/camera/color/camera_info
-```
-
-出力topic:
+通常のbox検出では以下をpublishする．
 
 ```text
 /tag_detections
@@ -270,21 +241,39 @@ roslaunch apriltag_box_detection box_detection.launch \
 /box_detection_image
 ```
 
-画像上のbox辺を確認する場合:
+`/box_detection_image`を確認する場合は`rqt_image_view`を起動し，表示topicとして選択する．
 
 ```bash
 rqt_image_view
-# /box_detection_image を選ぶ
 ```
 
-## usb_cam込みで起動
-USBカメラも一緒に起動したい場合は以下を使う。
+#### 任意カメラ
+
+`box_detection.launch`はカメラを起動しない．既にpublishされている画像topicとcamera_info topicを指定して，AprilTag検出とbox姿勢推定を起動する．
+
+```bash
+roslaunch apriltag_box_detection box_detection.launch \
+  image_topic:=/usb_cam/image_raw \
+  camera_info_topic:=/usb_cam/camera_info
+```
+
+RealSenseなど，別のカメラtopicを指定することもできる．
+
+```bash
+roslaunch apriltag_box_detection box_detection.launch \
+  image_topic:=/camera/color/image_raw \
+  camera_info_topic:=/camera/color/camera_info
+```
+
+#### USB webcam込み
+
+`webcam_box_detection.launch`は`usb_cam`と`box_detection.launch`をまとめて起動する．
 
 ```bash
 roslaunch apriltag_box_detection webcam_box_detection.launch
 ```
 
-カメラ設定を変える例:
+カメラ設定を変える例：
 
 ```bash
 roslaunch apriltag_box_detection webcam_box_detection.launch \
@@ -294,25 +283,23 @@ roslaunch apriltag_box_detection webcam_box_detection.launch \
   camera_info_url:=file:///home/leus/.ros/camera_info/usb_cam.yaml
 ```
 
-内部では `box_detection.launch` をincludeしている。
+#### RealSense込み
 
-## RealSense込みで起動
-`ros-noetic-realsense2-camera` を入れている場合は，RealSenseを起動してそのcolor画像をbox検出に渡せる。
+`realsense_box_detection.launch`はRealSenseと`box_detection.launch`をまとめて起動し，color画像をbox検出へ渡す．
 
 ```bash
 sudo apt install ros-noetic-realsense2-camera
 roslaunch apriltag_box_detection realsense_box_detection.launch
 ```
 
-内部では `realsense2_camera` の `rs_camera.launch` と，このパッケージの `box_detection.launch` をincludeしている。
-入力topicは標準のcolor streamを使う。
+標準では以下のcolor streamを使う．
 
 ```text
 /camera/color/image_raw
 /camera/color/camera_info
 ```
 
-RealSense単体で確認する場合:
+RealSense単体で確認する場合：
 
 ```bash
 roslaunch realsense2_camera rs_camera.launch
@@ -320,14 +307,14 @@ rqt_image_view
 # /camera/color/image_raw を選ぶ
 ```
 
-PCの画面が勝手に回転する場合は，`iio-sensor-proxy` を無効化する。
+PCの画面が勝手に回転する場合は，`iio-sensor-proxy`を無効化する．
 
 ```bash
 sudo systemctl disable iio-sensor-proxy
 sudo systemctl stop iio-sensor-proxy
 ```
 
-解像度やFPSを指定する例:
+解像度やFPSを指定する例：
 
 ```bash
 roslaunch apriltag_box_detection realsense_box_detection.launch \
@@ -336,23 +323,74 @@ roslaunch apriltag_box_detection realsense_box_detection.launch \
   color_fps:=30
 ```
 
-注意:
-- RealSenseの起動条件は，まず `roslaunch realsense2_camera rs_camera.launch` のデフォルト設定に合わせる。
-- `color_width` / `color_height` / `color_fps` の固定，`enable_depth`，`enable_confidence`，`publish_tf` などをデフォルトから変えると，RealSense driver側のstream構成やprofile選択が変わって大きな遅延が出ることがある。
-- カメラ単体で軽いのに検出込みで重い場合は，検出ノードより先にRealSenseの起動設定差を疑う。
+注意点：
 
-複数台接続時などでcamera namespaceを変える場合:
+- RealSenseの起動条件は，まず`roslaunch realsense2_camera rs_camera.launch`のデフォルト設定に合わせる．
+- `color_width` / `color_height` / `color_fps`の固定，`enable_depth`，`enable_confidence`，`publish_tf`などをデフォルトから変えると，RealSense driver側のstream構成やprofile選択が変わって大きな遅延が出ることがある．
+- カメラ単体で軽いのに検出込みで重い場合は，検出ノードより先にRealSenseの起動設定差を疑う．
+
+複数台接続時などでcamera namespaceを変える場合：
 
 ```bash
 roslaunch apriltag_box_detection realsense_box_detection.launch camera:=camera_1
 ```
 
-この場合，RealSenseの画像frame名も `camera_1_color_optical_frame` のように変わる。
-RVizにboxが出ない場合は，RVizのFixed Frameを画像topicの `header.frame_id` に合わせる。
-標準の `camera:=camera` では `camera_color_optical_frame` を使う。
+この場合，RealSenseの画像frame名も`camera_1_color_optical_frame`のように変わる．
+RVizにboxが出ない場合は，RVizのFixed Frameを画像topicの`header.frame_id`に合わせる．
+標準の`camera:=camera`では`camera_color_optical_frame`を使う．
 
-## 設定ファイル差し替え
-box設定やAprilTag設定を差し替える場合:
+### 2.2 robot相対box検出
+
+robotタグから`camera -> robot`，boxタグから`camera -> box`を求め，box姿勢を`robot_config`座標へ変換する．通常box検出のtopicに加えて以下をpublishする．
+
+```text
+/robot_relative_box_pose
+/robot_relative_box_markers
+```
+
+robotタグが一度見えた後にロストした場合は，最後に見えていた`camera -> robot`を保持して使う．まだ一度もrobotタグが見えていない場合はpublishしない．
+
+#### 任意カメラ
+
+`robot_relative_box_detection.launch`はカメラを起動しない．既にpublishされている画像topicとcamera_info topicを指定する．
+
+```bash
+roslaunch apriltag_box_detection robot_relative_box_detection.launch \
+  image_topic:=/usb_cam/image_raw \
+  camera_info_topic:=/usb_cam/camera_info
+```
+
+別のカメラtopicを使う場合：
+
+```bash
+roslaunch apriltag_box_detection robot_relative_box_detection.launch \
+  image_topic:=/camera/color/image_raw \
+  camera_info_topic:=/camera/color/camera_info
+```
+
+#### RealSense込み
+
+`realsense_robot_relative_box_detection.launch`はRealSense，通常box検出，robot相対変換，robot model，RVizをまとめて起動する．
+
+```bash
+roslaunch apriltag_box_detection realsense_robot_relative_box_detection.launch
+```
+
+### 2.3 設定確認
+
+検出を行わず，設定したbox・robot・tagの位置関係だけをRVizで確認する．
+
+```bash
+# boxとtagの配置
+roslaunch apriltag_box_detection box_config_viewer.launch
+
+# robot modelとrobot tagの配置
+roslaunch apriltag_box_detection robot_config_viewer.launch
+```
+
+### 2.4 設定ファイル差し替え
+
+box設定やAprilTag設定を差し替える場合：
 
 ```bash
 roslaunch apriltag_box_detection box_detection.launch \
@@ -364,11 +402,12 @@ roslaunch apriltag_box_detection box_detection.launch \
 ```
 
 # 注意点メモ
-- daeは `assets/meshes/tag_<id>.dae` という名前で探す
-- tag画像は `assets/tags/tag_<id>.png` に保存される
-- PDF読み込みには `pdftoppm` が必要。`poppler-utils` に入っている
-- tagが小さくて選びにくい場合は，GUI windowを広げると画像表示も拡大される
-- `normal` を0にするとbox面とtag表示が重なって見づらいので，少しだけ浮かせる
-- box推定には画像topicだけでなく，キャリブ済みのcamera_info topicが必要
-- `/box_detection_image` はcamera_infoの内部パラメータで3D boxを画像に投影している
-- 歪みが気になる場合は，raw画像よりrectified画像topicを使う
+- daeは`assets/meshes/tag_<id>.dae`という名前で探す．
+- tag画像は`assets/tags/tag_<id>.png`に保存される．
+- PDF読み込みには`pdftoppm`が必要．`poppler-utils`に含まれる．
+- tagが小さくて選びにくい場合は，GUI windowを広げると画像表示も拡大される．
+- `normal`を0にするとbox面とtag表示が重なって見づらいため，少しだけ浮かせる．
+- box推定には画像topicだけでなく，キャリブレーション済みのcamera_info topicが必要．
+- `/box_detection_image`はcamera_infoの内部パラメータで3D boxを画像へ投影している．
+- 歪みが気になる場合は，raw画像よりrectified画像topicを使う．
+- robot相対の場合，robot位置推定とbox位置推定を同時に行うと誤差が増える．robot位置のtagは，一度認識された後に隠す方がbox検出は安定する．

@@ -241,13 +241,21 @@ def default_config_path():
 
 
 class BoxPoseEstimator:
-    def __init__(self):
+    def __init__(self, subscribe=True):
         config_file = rospy.get_param("~config_file", default_config_path())
         self.config = load_config(config_file)
         self.tag_to_box = self.build_tag_index(self.config)
         self.pose_pub = rospy.Publisher("box_pose", PoseStamped, queue_size=1)
         self.marker_pub = rospy.Publisher("box_detection_markers", MarkerArray, queue_size=1)
-        self.subscriber = rospy.Subscriber("tag_detections", AprilTagDetectionArray, self.on_detections, queue_size=1)
+        self.subscriber = None
+        if subscribe:
+            queue_size = max(1, int(rospy.get_param("~queue_size", 10)))
+            self.subscriber = rospy.Subscriber(
+                "tag_detections",
+                AprilTagDetectionArray,
+                self.on_detections,
+                queue_size=queue_size,
+            )
         rospy.loginfo("loaded box config: %s", config_file)
         rospy.loginfo("indexed %d tag(s) for box pose estimation", len(self.tag_to_box))
 
@@ -266,6 +274,16 @@ class BoxPoseEstimator:
         return tag_to_box
 
     def on_detections(self, msg):
+        result = self.estimate_box(msg)
+        if result is None:
+            return None
+
+        camera_box, box, tag_id = result
+        self.publish_box_pose(msg.header, camera_box)
+        self.publish_markers(msg.header, camera_box, box, tag_id)
+        return result
+
+    def estimate_box(self, msg):
         for detection in msg.detections:
             if not detection.id:
                 continue
@@ -277,9 +295,8 @@ class BoxPoseEstimator:
             camera_tag = pose_to_transform(detection.pose.pose.pose)
             box_tag = box_data["box_tag_transform"]
             camera_box = multiply_transform(camera_tag, inverse_transform(box_tag))
-            self.publish_box_pose(msg.header, camera_box)
-            self.publish_markers(msg.header, camera_box, box_data["box"], tag_id)
-            return
+            return camera_box, box_data["box"], tag_id
+        return None
 
     def publish_box_pose(self, header, camera_box):
         position, quaternion = transform_to_pose(camera_box)

@@ -3,9 +3,9 @@ frame_id: box_config
 boxes:
   - name: box_0
     size:
-      x: 0.21
-      y: 0.21
-      z: 0.07
+      x: 0.15
+      y: 0.15
+      z: 0.8
 
     tags:
       - id: 0
