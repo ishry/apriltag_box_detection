@@ -9,6 +9,9 @@
   <arg name="manta_package_root" default="/home/leus/catkin_ws/manta_ws/src/manta_controller" />
   <arg name="root_frame" default="CHASSIS" />
   <arg name="overlay" default="true" />
+  <arg name="velocity_filter_alpha" default="0.2" />
+  <arg name="min_velocity_dt" default="0.001" />
+  <arg name="max_velocity_dt" default="0.5" />
 
   <env name="ROS_PACKAGE_PATH" value="$(arg manta_package_root):$(optenv ROS_PACKAGE_PATH)" />
 
@@ -45,9 +48,13 @@
         name="robot_relative_box_pose_estimator" output="screen">
     <param name="robot_config_file" value="$(arg robot_config_file)" />
     <param name="box_config_file" value="$(arg box_config_file)" />
+    <param name="velocity_filter_alpha" value="$(arg velocity_filter_alpha)" />
+    <param name="min_velocity_dt" value="$(arg min_velocity_dt)" />
+    <param name="max_velocity_dt" value="$(arg max_velocity_dt)" />
     <remap from="tag_detections" to="/tag_detections" />
     <remap from="box_pose" to="/box_pose" />
     <remap from="robot_relative_box_pose" to="/robot_relative_box_pose" />
+    <remap from="robot_relative_box_twist" to="/robot_relative_box_twist" />
     <remap from="robot_relative_box_markers" to="/robot_relative_box_markers" />
   </node>
 </launch>

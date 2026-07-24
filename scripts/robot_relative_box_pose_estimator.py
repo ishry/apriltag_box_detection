@@ -7,7 +7,7 @@ import rospy
 import rospkg
 import yaml
 from apriltag_ros.msg import AprilTagDetectionArray
-from geometry_msgs.msg import Point, PoseStamped, Vector3
+from geometry_msgs.msg import Point, PoseStamped, TwistStamped, Vector3
 from std_msgs.msg import ColorRGBA
 from visualization_msgs.msg import Marker, MarkerArray
 
@@ -132,6 +132,66 @@ def transform_to_pose(t):
     return position, matrix_to_quaternion(rotation)
 
 
+def transform_velocity(previous_transform, current_transform, dt):
+    previous_position, _ = transform_to_pose(previous_transform)
+    current_position, _ = transform_to_pose(current_transform)
+    linear = tuple(
+        (current_position[index] - previous_position[index]) / dt
+        for index in range(3)
+    )
+
+    previous_rotation_transpose = [
+        [previous_transform[col][row] for col in range(3)]
+        for row in range(3)
+    ]
+    delta_rotation = [
+        [
+            sum(
+                current_transform[row][index] * previous_rotation_transpose[index][col]
+                for index in range(3)
+            )
+            for col in range(3)
+        ]
+        for row in range(3)
+    ]
+    delta_quaternion = matrix_to_quaternion(delta_rotation)
+    qx, qy, qz, qw = delta_quaternion
+    quaternion_norm = math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw)
+    if quaternion_norm <= 1e-12:
+        return linear, (0.0, 0.0, 0.0)
+
+    qx /= quaternion_norm
+    qy /= quaternion_norm
+    qz /= quaternion_norm
+    qw /= quaternion_norm
+    if qw < 0.0:
+        qx = -qx
+        qy = -qy
+        qz = -qz
+        qw = -qw
+
+    vector_norm = math.sqrt(qx * qx + qy * qy + qz * qz)
+    if vector_norm <= 1e-12:
+        angular = (0.0, 0.0, 0.0)
+    else:
+        angle = 2.0 * math.atan2(vector_norm, qw)
+        angular = (
+            qx / vector_norm * angle / dt,
+            qy / vector_norm * angle / dt,
+            qz / vector_norm * angle / dt,
+        )
+    return linear, angular
+
+
+def filter_vector(previous, current, alpha):
+    if previous is None:
+        return current
+    return tuple(
+        alpha * current[index] + (1.0 - alpha) * previous[index]
+        for index in range(3)
+    )
+
+
 def pose_to_transform(pose):
     position = (
         pose.position.x,
@@ -217,8 +277,22 @@ class RobotRelativeBoxPoseEstimator:
         self.last_camera_robot = None
         self.last_robot_stamp = None
         self.last_robot_tag_id = None
+        self.last_robot_box = None
+        self.last_box_stamp = None
+        self.filtered_linear_velocity = None
+        self.filtered_angular_velocity = None
+        self.velocity_filter_alpha = float(rospy.get_param("~velocity_filter_alpha", 0.2))
+        self.min_velocity_dt = float(rospy.get_param("~min_velocity_dt", 0.001))
+        self.max_velocity_dt = float(rospy.get_param("~max_velocity_dt", 0.5))
+        if not 0.0 < self.velocity_filter_alpha <= 1.0:
+            raise ValueError("velocity_filter_alpha must be in (0, 1]")
+        if self.min_velocity_dt <= 0.0:
+            raise ValueError("min_velocity_dt must be positive")
+        if self.max_velocity_dt <= self.min_velocity_dt:
+            raise ValueError("max_velocity_dt must be greater than min_velocity_dt")
 
         self.pose_pub = rospy.Publisher("robot_relative_box_pose", PoseStamped, queue_size=1)
+        self.twist_pub = rospy.Publisher("robot_relative_box_twist", TwistStamped, queue_size=1)
         self.marker_pub = rospy.Publisher("robot_relative_box_markers", MarkerArray, queue_size=1)
         self.tag_subscriber = rospy.Subscriber("tag_detections", AprilTagDetectionArray, self.on_detections, queue_size=1)
         self.box_subscriber = rospy.Subscriber("box_pose", PoseStamped, self.on_box_pose, queue_size=1)
@@ -260,6 +334,7 @@ class RobotRelativeBoxPoseEstimator:
         camera_box = pose_to_transform(msg.pose)
         robot_box = multiply_transform(inverse_transform(self.last_camera_robot), camera_box)
         self.publish_robot_relative_box_pose(msg.header.stamp, robot_box)
+        self.update_and_publish_robot_relative_box_twist(msg.header.stamp, robot_box)
         self.publish_robot_relative_markers(msg.header.stamp, robot_box)
 
     def publish_robot_relative_box_pose(self, stamp, robot_box):
@@ -275,6 +350,77 @@ class RobotRelativeBoxPoseEstimator:
         pose_msg.pose.orientation.z = quaternion[2]
         pose_msg.pose.orientation.w = quaternion[3]
         self.pose_pub.publish(pose_msg)
+
+    def update_and_publish_robot_relative_box_twist(self, stamp, robot_box):
+        if self.last_robot_box is None:
+            self.last_robot_box = robot_box
+            self.last_box_stamp = stamp
+            self.publish_robot_relative_box_twist(
+                stamp,
+                (0.0, 0.0, 0.0),
+                (0.0, 0.0, 0.0),
+            )
+            return
+
+        dt = (stamp - self.last_box_stamp).to_sec()
+        if dt < self.min_velocity_dt:
+            rospy.logwarn_throttle(
+                2.0,
+                "box pose timestamp did not advance enough for velocity estimation",
+            )
+            return
+
+        if dt > self.max_velocity_dt:
+            self.last_robot_box = robot_box
+            self.last_box_stamp = stamp
+            self.filtered_linear_velocity = None
+            self.filtered_angular_velocity = None
+            self.publish_robot_relative_box_twist(
+                stamp,
+                (0.0, 0.0, 0.0),
+                (0.0, 0.0, 0.0),
+            )
+            rospy.logwarn_throttle(
+                2.0,
+                "box pose gap exceeded %.3f s; robot-relative velocity was reset",
+                self.max_velocity_dt,
+            )
+            return
+
+        linear_velocity, angular_velocity = transform_velocity(
+            self.last_robot_box,
+            robot_box,
+            dt,
+        )
+        self.filtered_linear_velocity = filter_vector(
+            self.filtered_linear_velocity,
+            linear_velocity,
+            self.velocity_filter_alpha,
+        )
+        self.filtered_angular_velocity = filter_vector(
+            self.filtered_angular_velocity,
+            angular_velocity,
+            self.velocity_filter_alpha,
+        )
+        self.last_robot_box = robot_box
+        self.last_box_stamp = stamp
+        self.publish_robot_relative_box_twist(
+            stamp,
+            self.filtered_linear_velocity,
+            self.filtered_angular_velocity,
+        )
+
+    def publish_robot_relative_box_twist(self, stamp, linear_velocity, angular_velocity):
+        twist_msg = TwistStamped()
+        twist_msg.header.stamp = stamp
+        twist_msg.header.frame_id = self.robot_frame_id
+        twist_msg.twist.linear.x = linear_velocity[0]
+        twist_msg.twist.linear.y = linear_velocity[1]
+        twist_msg.twist.linear.z = linear_velocity[2]
+        twist_msg.twist.angular.x = angular_velocity[0]
+        twist_msg.twist.angular.y = angular_velocity[1]
+        twist_msg.twist.angular.z = angular_velocity[2]
+        self.twist_pub.publish(twist_msg)
 
     def publish_robot_relative_markers(self, stamp, robot_box):
         marker_array = MarkerArray()

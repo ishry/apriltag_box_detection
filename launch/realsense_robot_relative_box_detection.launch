@@ -16,6 +16,9 @@
   <arg name="manta_package_root" default="/home/leus/catkin_ws/manta_ws/src/manta_controller" />
   <arg name="root_frame" default="CHASSIS" />
   <arg name="overlay" default="true" />
+  <arg name="velocity_filter_alpha" default="0.2" />
+  <arg name="min_velocity_dt" default="0.001" />
+  <arg name="max_velocity_dt" default="0.5" />
   <arg name="rviz" default="true" />
   <arg name="rviz_config_file" default="$(find apriltag_box_detection)/rviz/realsense_robot_relative_box_detection.rviz" />
 
@@ -45,6 +48,9 @@
     <arg name="manta_package_root" value="$(arg manta_package_root)" />
     <arg name="root_frame" value="$(arg root_frame)" />
     <arg name="overlay" value="$(arg overlay)" />
+    <arg name="velocity_filter_alpha" value="$(arg velocity_filter_alpha)" />
+    <arg name="min_velocity_dt" value="$(arg min_velocity_dt)" />
+    <arg name="max_velocity_dt" value="$(arg max_velocity_dt)" />
   </include>
 
   <node if="$(arg rviz)" pkg="rviz" type="rviz" name="realsense_robot_relative_box_detection_rviz"

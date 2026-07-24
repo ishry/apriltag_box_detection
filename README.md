@@ -345,10 +345,20 @@ robotタグから`camera -> robot`，boxタグから`camera -> box`を求め，b
 
 ```text
 /robot_relative_box_pose
+/robot_relative_box_twist
 /robot_relative_box_markers
 ```
 
 robotタグが一度見えた後にロストした場合は，最後に見えていた`camera -> robot`を保持して使う．まだ一度もrobotタグが見えていない場合はpublishしない．
+`/robot_relative_box_twist`は`geometry_msgs/TwistStamped`で，線速度と角速度を`robot_config`座標でpublishする．最初の観測と，観測間隔が`max_velocity_dt`を超えた直後は速度を0へ初期化する．通常時はrobot相対poseの差分から速度を計算し，`velocity_filter_alpha`の指数移動平均を適用する．
+
+速度推定parameterのdefaultは以下のとおり．
+
+```text
+velocity_filter_alpha: 0.2
+min_velocity_dt:       0.001 s
+max_velocity_dt:       0.5 s
+```
 
 #### 任意カメラ
 
