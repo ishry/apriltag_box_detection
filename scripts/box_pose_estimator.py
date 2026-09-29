@@ -10,6 +10,7 @@ from apriltag_ros.msg import AprilTagDetectionArray
 from geometry_msgs.msg import Point, PoseStamped, Vector3
 from std_msgs.msg import ColorRGBA
 from visualization_msgs.msg import Marker, MarkerArray
+from apriltag_box_detection.msg import BoxPose, BoxPoseArray
 
 
 FACE_AXES = {
@@ -245,8 +246,10 @@ class BoxPoseEstimator:
         config_file = rospy.get_param("~config_file", default_config_path())
         self.config = load_config(config_file)
         self.tag_to_box = self.build_tag_index(self.config)
+        self.pose_array_pub = rospy.Publisher("box_poses", BoxPoseArray, queue_size=1)
         self.pose_pub = rospy.Publisher("box_pose", PoseStamped, queue_size=1)
         self.marker_pub = rospy.Publisher("box_detection_markers", MarkerArray, queue_size=1)
+        self.previous_marker_box_ids = set()
         self.subscriber = None
         if subscribe:
             queue_size = max(1, int(rospy.get_param("~queue_size", 10)))
@@ -261,29 +264,41 @@ class BoxPoseEstimator:
 
     def build_tag_index(self, config):
         tag_to_box = {}
-        for box in config.get("boxes", []):
+        box_ids = set()
+        for index, box in enumerate(config.get("boxes", [])):
+            box_id = str(box.get("id", box.get("name", "box_%d" % index)))
+            box_name = str(box.get("name", box_id))
+            if box_id in box_ids:
+                raise ValueError("duplicate box id in box config: %s" % box_id)
+            box_ids.add(box_id)
+
             for tag in box.get("tags", []):
                 tag_id = int(tag["id"])
                 if tag_id in tag_to_box:
                     raise ValueError("duplicate tag id in box config: %s" % tag_id)
                 tag_to_box[tag_id] = {
                     "box": box,
+                    "box_id": box_id,
+                    "box_name": box_name,
                     "tag": tag,
                     "box_tag_transform": tag_transform_in_box(box, tag),
                 }
         return tag_to_box
 
     def on_detections(self, msg):
-        result = self.estimate_box(msg)
-        if result is None:
-            return None
-
-        camera_box, box, tag_id = result
-        self.publish_box_pose(msg.header, camera_box)
-        self.publish_markers(msg.header, camera_box, box, tag_id)
-        return result
+        results = self.estimate_boxes(msg)
+        self.publish_box_poses(msg.header, results)
+        self.publish_markers(msg.header, results)
+        return results
 
     def estimate_box(self, msg):
+        results = self.estimate_boxes(msg)
+        if not results:
+            return None
+        return results[0]
+
+    def estimate_boxes(self, msg):
+        results_by_box_id = {}
         for detection in msg.detections:
             if not detection.id:
                 continue
@@ -292,11 +307,49 @@ class BoxPoseEstimator:
                 continue
 
             box_data = self.tag_to_box[tag_id]
+            box_id = box_data["box_id"]
+            if box_id in results_by_box_id:
+                continue
             camera_tag = pose_to_transform(detection.pose.pose.pose)
             box_tag = box_data["box_tag_transform"]
             camera_box = multiply_transform(camera_tag, inverse_transform(box_tag))
-            return camera_box, box_data["box"], tag_id
-        return None
+            results_by_box_id[box_id] = {
+                "camera_box": camera_box,
+                "box": box_data["box"],
+                "box_id": box_id,
+                "box_name": box_data["box_name"],
+                "source_tag_id": tag_id,
+            }
+        return list(results_by_box_id.values())
+
+    def publish_box_poses(self, header, results):
+        pose_array = BoxPoseArray()
+        pose_array.header = header
+
+        for result in results:
+            box_pose = BoxPose()
+            box_pose.box_id = result["box_id"]
+            box_pose.box_name = result["box_name"]
+            box_pose.source_tag_id = result["source_tag_id"]
+            self.set_pose(box_pose.pose, result["camera_box"])
+            pose_array.boxes.append(box_pose)
+
+        self.pose_array_pub.publish(pose_array)
+
+        # Keep the original single-pose topic for existing consumers. New
+        # consumers should use box_poses so that no detections are lost.
+        if results:
+            self.publish_box_pose(header, results[0]["camera_box"])
+
+    def set_pose(self, pose, transform):
+        position, quaternion = transform_to_pose(transform)
+        pose.position.x = position[0]
+        pose.position.y = position[1]
+        pose.position.z = position[2]
+        pose.orientation.x = quaternion[0]
+        pose.orientation.y = quaternion[1]
+        pose.orientation.z = quaternion[2]
+        pose.orientation.w = quaternion[3]
 
     def publish_box_pose(self, header, camera_box):
         position, quaternion = transform_to_pose(camera_box)
@@ -311,47 +364,55 @@ class BoxPoseEstimator:
         pose_msg.pose.orientation.w = quaternion[3]
         self.pose_pub.publish(pose_msg)
 
-    def publish_markers(self, header, camera_box, box, source_tag_id):
+    def publish_markers(self, header, results):
         marker_array = MarkerArray()
-        marker_id = 0
-        size = box["size"]
-        sx = float(size["x"])
-        sy = float(size["y"])
-        sz = float(size["z"])
+        current_box_ids = set()
 
-        cube = marker_base(header.frame_id, "detected_box", marker_id, Marker.CUBE, header.stamp)
-        marker_id += 1
-        position, quaternion = transform_to_pose(camera_box)
-        cube.pose.position.x = position[0]
-        cube.pose.position.y = position[1]
-        cube.pose.position.z = position[2]
-        cube.pose.orientation.x = quaternion[0]
-        cube.pose.orientation.y = quaternion[1]
-        cube.pose.orientation.z = quaternion[2]
-        cube.pose.orientation.w = quaternion[3]
-        cube.scale = Vector3(sx, sy, sz)
-        cube.color = color_msg(0.1, 0.45, 1.0, 0.18)
-        marker_array.markers.append(cube)
+        for result in results:
+            box_id = result["box_id"]
+            current_box_ids.add(box_id)
+            box = result["box"]
+            camera_box = result["camera_box"]
+            namespace = "detected_box_%s" % box_id
+            size = box["size"]
+            sx = float(size["x"])
+            sy = float(size["y"])
+            sz = float(size["z"])
 
-        line = marker_base(header.frame_id, "detected_box_edges", marker_id, Marker.LINE_LIST, header.stamp)
-        marker_id += 1
-        line.scale.x = 0.006
-        line.color = color_msg(0.0, 1.0, 0.35, 1.0)
-        corners = self.box_corners(sx, sy, sz)
-        transformed = [transform_point(camera_box, corner) for corner in corners]
-        for start, end in BOX_EDGES:
-            line.points.append(point_msg(transformed[start]))
-            line.points.append(point_msg(transformed[end]))
-        marker_array.markers.append(line)
+            cube = marker_base(header.frame_id, namespace, 0, Marker.CUBE, header.stamp)
+            self.set_pose(cube.pose, camera_box)
+            cube.scale = Vector3(sx, sy, sz)
+            cube.color = color_msg(0.1, 0.45, 1.0, 0.18)
+            marker_array.markers.append(cube)
 
-        text = marker_base(header.frame_id, "detected_box_label", marker_id, Marker.TEXT_VIEW_FACING, header.stamp)
-        text.pose.position.x = position[0]
-        text.pose.position.y = position[1]
-        text.pose.position.z = position[2] + sz / 2.0 + 0.04
-        text.scale.z = 0.035
-        text.color = color_msg(1.0, 1.0, 1.0, 1.0)
-        text.text = "%s from tag %s" % (box.get("name", "box"), source_tag_id)
-        marker_array.markers.append(text)
+            line = marker_base(header.frame_id, namespace + "_edges", 0, Marker.LINE_LIST, header.stamp)
+            line.scale.x = 0.006
+            line.color = color_msg(0.0, 1.0, 0.35, 1.0)
+            corners = self.box_corners(sx, sy, sz)
+            transformed = [transform_point(camera_box, corner) for corner in corners]
+            for start, end in BOX_EDGES:
+                line.points.append(point_msg(transformed[start]))
+                line.points.append(point_msg(transformed[end]))
+            marker_array.markers.append(line)
+
+            text = marker_base(header.frame_id, namespace + "_label", 0, Marker.TEXT_VIEW_FACING, header.stamp)
+            position, quaternion = transform_to_pose(camera_box)
+            text.pose.position.x = position[0]
+            text.pose.position.y = position[1]
+            text.pose.position.z = position[2] + sz / 2.0 + 0.04
+            text.scale.z = 0.035
+            text.color = color_msg(1.0, 1.0, 1.0, 1.0)
+            text.text = "%s from tag %s" % (result["box_name"], result["source_tag_id"])
+            marker_array.markers.append(text)
+
+        for box_id in sorted(self.previous_marker_box_ids - current_box_ids):
+            namespace = "detected_box_%s" % box_id
+            for marker_namespace in (namespace, namespace + "_edges", namespace + "_label"):
+                marker = marker_base(header.frame_id, marker_namespace, 0, Marker.CUBE, header.stamp)
+                marker.action = Marker.DELETE
+                marker_array.markers.append(marker)
+
+        self.previous_marker_box_ids = current_box_ids
 
         self.marker_pub.publish(marker_array)
 

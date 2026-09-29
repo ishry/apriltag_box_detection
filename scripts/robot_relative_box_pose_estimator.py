@@ -10,6 +10,7 @@ from apriltag_ros.msg import AprilTagDetectionArray
 from geometry_msgs.msg import Point, PoseStamped, TwistStamped, Vector3
 from std_msgs.msg import ColorRGBA
 from visualization_msgs.msg import Marker, MarkerArray
+from apriltag_box_detection.msg import BoxPose, BoxPoseArray
 
 
 BOX_EDGES = [
@@ -273,7 +274,7 @@ class RobotRelativeBoxPoseEstimator:
         self.box_config = load_config(box_config_file)
         self.robot_frame_id = self.robot_config.get("frame_id", "robot_config")
         self.robot_tags = self.build_robot_tag_index(self.robot_config)
-        self.box = self.box_config.get("boxes", [])[0]
+        self.boxes_by_id = self.build_box_index(self.box_config)
         self.last_camera_robot = None
         self.last_robot_stamp = None
         self.last_robot_tag_id = None
@@ -291,11 +292,13 @@ class RobotRelativeBoxPoseEstimator:
         if self.max_velocity_dt <= self.min_velocity_dt:
             raise ValueError("max_velocity_dt must be greater than min_velocity_dt")
 
+        self.pose_array_pub = rospy.Publisher("robot_relative_box_poses", BoxPoseArray, queue_size=1)
         self.pose_pub = rospy.Publisher("robot_relative_box_pose", PoseStamped, queue_size=1)
         self.twist_pub = rospy.Publisher("robot_relative_box_twist", TwistStamped, queue_size=1)
         self.marker_pub = rospy.Publisher("robot_relative_box_markers", MarkerArray, queue_size=1)
         self.tag_subscriber = rospy.Subscriber("tag_detections", AprilTagDetectionArray, self.on_detections, queue_size=1)
-        self.box_subscriber = rospy.Subscriber("box_pose", PoseStamped, self.on_box_pose, queue_size=1)
+        self.box_subscriber = rospy.Subscriber("box_poses", BoxPoseArray, self.on_box_poses, queue_size=1)
+        self.previous_marker_box_ids = set()
 
         rospy.loginfo("loaded robot config: %s", robot_config_file)
         rospy.loginfo("loaded box config: %s", box_config_file)
@@ -310,6 +313,15 @@ class RobotRelativeBoxPoseEstimator:
                 raise ValueError("duplicate tag id in robot config: %s" % tag_id)
             tag_to_robot[tag_id] = pose_config_to_transform(tag.get("pose", {}))
         return tag_to_robot
+
+    def build_box_index(self, config):
+        boxes_by_id = {}
+        for index, box in enumerate(config.get("boxes", [])):
+            box_id = str(box.get("id", box.get("name", "box_%d" % index)))
+            if box_id in boxes_by_id:
+                raise ValueError("duplicate box id in box config: %s" % box_id)
+            boxes_by_id[box_id] = box
+        return boxes_by_id
 
     def on_detections(self, msg):
         for detection in msg.detections:
@@ -326,16 +338,64 @@ class RobotRelativeBoxPoseEstimator:
             self.last_robot_tag_id = tag_id
             return
 
-    def on_box_pose(self, msg):
+    def on_box_poses(self, msg):
         if self.last_camera_robot is None:
             rospy.logwarn_throttle(2.0, "no robot tag pose has been observed yet; robot-relative box pose is not available")
             return
 
-        camera_box = pose_to_transform(msg.pose)
-        robot_box = multiply_transform(inverse_transform(self.last_camera_robot), camera_box)
-        self.publish_robot_relative_box_pose(msg.header.stamp, robot_box)
-        self.update_and_publish_robot_relative_box_twist(msg.header.stamp, robot_box)
-        self.publish_robot_relative_markers(msg.header.stamp, robot_box)
+        robot_boxes = []
+        for box_pose in msg.boxes:
+            if box_pose.box_id not in self.boxes_by_id:
+                rospy.logwarn_throttle(
+                    2.0,
+                    "received box id '%s' that is not present in box config",
+                    box_pose.box_id,
+                )
+                continue
+
+            camera_box = pose_to_transform(box_pose.pose)
+            robot_box = multiply_transform(inverse_transform(self.last_camera_robot), camera_box)
+            robot_boxes.append({
+                "box_id": box_pose.box_id,
+                "box_name": box_pose.box_name,
+                "source_tag_id": box_pose.source_tag_id,
+                "robot_box": robot_box,
+            })
+
+        self.publish_robot_relative_box_poses(msg.header.stamp, robot_boxes)
+        self.publish_robot_relative_markers(msg.header.stamp, robot_boxes)
+
+    def publish_robot_relative_box_poses(self, stamp, robot_boxes):
+        pose_array = BoxPoseArray()
+        pose_array.header.stamp = stamp
+        pose_array.header.frame_id = self.robot_frame_id
+
+        for result in robot_boxes:
+            box_pose = BoxPose()
+            box_pose.box_id = result["box_id"]
+            box_pose.box_name = result["box_name"]
+            box_pose.source_tag_id = result["source_tag_id"]
+            self.set_pose(box_pose.pose, result["robot_box"])
+            pose_array.boxes.append(box_pose)
+
+        self.pose_array_pub.publish(pose_array)
+
+        # Keep the original single-pose topics for existing RL consumers.
+        # The first configured/detected box remains the compatibility target.
+        if robot_boxes:
+            robot_box = robot_boxes[0]["robot_box"]
+            self.publish_robot_relative_box_pose(stamp, robot_box)
+            self.update_and_publish_robot_relative_box_twist(stamp, robot_box)
+
+    def set_pose(self, pose, transform):
+        position, quaternion = transform_to_pose(transform)
+        pose.position.x = position[0]
+        pose.position.y = position[1]
+        pose.position.z = position[2]
+        pose.orientation.x = quaternion[0]
+        pose.orientation.y = quaternion[1]
+        pose.orientation.z = quaternion[2]
+        pose.orientation.w = quaternion[3]
 
     def publish_robot_relative_box_pose(self, stamp, robot_box):
         position, quaternion = transform_to_pose(robot_box)
@@ -422,50 +482,57 @@ class RobotRelativeBoxPoseEstimator:
         twist_msg.twist.angular.z = angular_velocity[2]
         self.twist_pub.publish(twist_msg)
 
-    def publish_robot_relative_markers(self, stamp, robot_box):
+    def publish_robot_relative_markers(self, stamp, robot_boxes):
         marker_array = MarkerArray()
-        marker_id = 0
-        size = self.box["size"]
-        sx = float(size["x"])
-        sy = float(size["y"])
-        sz = float(size["z"])
-        position, quaternion = transform_to_pose(robot_box)
+        current_box_ids = set()
 
-        cube = marker_base(self.robot_frame_id, "robot_relative_box", marker_id, Marker.CUBE, stamp)
-        marker_id += 1
-        cube.pose.position.x = position[0]
-        cube.pose.position.y = position[1]
-        cube.pose.position.z = position[2]
-        cube.pose.orientation.x = quaternion[0]
-        cube.pose.orientation.y = quaternion[1]
-        cube.pose.orientation.z = quaternion[2]
-        cube.pose.orientation.w = quaternion[3]
-        cube.scale = Vector3(sx, sy, sz)
-        cube.color = color_msg(0.1, 0.45, 1.0, 0.18)
-        marker_array.markers.append(cube)
+        for result in robot_boxes:
+            box_id = result["box_id"]
+            current_box_ids.add(box_id)
+            box = self.boxes_by_id[box_id]
+            robot_box = result["robot_box"]
+            namespace = "robot_relative_box_%s" % box_id
+            size = box["size"]
+            sx = float(size["x"])
+            sy = float(size["y"])
+            sz = float(size["z"])
 
-        line = marker_base(self.robot_frame_id, "robot_relative_box_edges", marker_id, Marker.LINE_LIST, stamp)
-        marker_id += 1
-        line.scale.x = 0.006
-        line.color = color_msg(0.0, 1.0, 0.35, 1.0)
-        corners = self.box_corners(sx, sy, sz)
-        transformed = [transform_point(robot_box, corner) for corner in corners]
-        for start, end in BOX_EDGES:
-            line.points.append(point_msg(transformed[start]))
-            line.points.append(point_msg(transformed[end]))
-        marker_array.markers.append(line)
+            cube = marker_base(self.robot_frame_id, namespace, 0, Marker.CUBE, stamp)
+            self.set_pose(cube.pose, robot_box)
+            cube.scale = Vector3(sx, sy, sz)
+            cube.color = color_msg(0.1, 0.45, 1.0, 0.18)
+            marker_array.markers.append(cube)
 
-        text = marker_base(self.robot_frame_id, "robot_relative_box_label", marker_id, Marker.TEXT_VIEW_FACING, stamp)
-        text.pose.position.x = position[0]
-        text.pose.position.y = position[1]
-        text.pose.position.z = position[2] + sz / 2.0 + 0.04
-        text.scale.z = 0.035
-        text.color = color_msg(1.0, 1.0, 1.0, 1.0)
-        text.text = "%s in robot frame" % self.box.get("name", "box")
-        if self.last_robot_tag_id is not None:
-            text.text += " from robot tag %s" % self.last_robot_tag_id
-        marker_array.markers.append(text)
+            line = marker_base(self.robot_frame_id, namespace + "_edges", 0, Marker.LINE_LIST, stamp)
+            line.scale.x = 0.006
+            line.color = color_msg(0.0, 1.0, 0.35, 1.0)
+            corners = self.box_corners(sx, sy, sz)
+            transformed = [transform_point(robot_box, corner) for corner in corners]
+            for start, end in BOX_EDGES:
+                line.points.append(point_msg(transformed[start]))
+                line.points.append(point_msg(transformed[end]))
+            marker_array.markers.append(line)
 
+            text = marker_base(self.robot_frame_id, namespace + "_label", 0, Marker.TEXT_VIEW_FACING, stamp)
+            position, quaternion = transform_to_pose(robot_box)
+            text.pose.position.x = position[0]
+            text.pose.position.y = position[1]
+            text.pose.position.z = position[2] + sz / 2.0 + 0.04
+            text.scale.z = 0.035
+            text.color = color_msg(1.0, 1.0, 1.0, 1.0)
+            text.text = "%s in robot frame" % result["box_name"]
+            if self.last_robot_tag_id is not None:
+                text.text += " from robot tag %s" % self.last_robot_tag_id
+            marker_array.markers.append(text)
+
+        for box_id in sorted(self.previous_marker_box_ids - current_box_ids):
+            namespace = "robot_relative_box_%s" % box_id
+            for marker_namespace in (namespace, namespace + "_edges", namespace + "_label"):
+                marker = marker_base(self.robot_frame_id, marker_namespace, 0, Marker.CUBE, stamp)
+                marker.action = Marker.DELETE
+                marker_array.markers.append(marker)
+
+        self.previous_marker_box_ids = current_box_ids
         self.marker_pub.publish(marker_array)
 
     def box_corners(self, sx, sy, sz):

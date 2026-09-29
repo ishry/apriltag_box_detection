@@ -109,7 +109,8 @@ src/apriltag_box_detection/config/box.yaml
 frame_id: box_config
 
 boxes:
-  - name: box_0
+  - id: box_0
+    name: box_0
     size:
       x: 0.30
       y: 0.20
@@ -125,6 +126,8 @@ boxes:
         rotation:
           yaw: 0.0
 ```
+
+`boxes`には複数のboxを記述できる．`id`は購読側が識別に使う一意な値，`name`は表示用の名前である．boxごとにTag IDを割り当て，同じTag IDを複数boxに割り当てると設定エラーになる．
 
 `face`番号：
 
@@ -236,10 +239,13 @@ box_detection.launch
 
 ```text
 /tag_detections
+/box_poses
 /box_pose
 /box_detection_markers
 /box_detection_image
 ```
+
+`/box_poses`は検出された全boxを含む`apriltag_box_detection/BoxPoseArray`をpublishする．各要素には`box_id`，`box_name`，使用した`source_tag_id`，姿勢が含まれる．`/box_pose`は既存の購読側向けに先頭のboxだけを`geometry_msgs/PoseStamped`でpublishする．複数boxを扱う場合は`/box_poses`を使う．
 
 `/box_detection_image`を確認する場合は`rqt_image_view`を起動し，表示topicとして選択する．
 
@@ -345,9 +351,12 @@ robotタグから`camera -> robot`，boxタグから`camera -> box`を求め，b
 
 ```text
 /robot_relative_box_pose
+/robot_relative_box_poses
 /robot_relative_box_twist
 /robot_relative_box_markers
 ```
+
+`/robot_relative_box_poses`には，検出された全boxをrobot座標系へ変換した`apriltag_box_detection/BoxPoseArray`をpublishする．`/robot_relative_box_pose`と`/robot_relative_box_twist`は既存のRL購読側との互換性のため，先頭のboxを対象にpublishする．複数boxを扱う場合は`/robot_relative_box_poses`を使う．
 
 robotタグが一度見えた後にロストした場合は，最後に見えていた`camera -> robot`を保持して使う．まだ一度もrobotタグが見えていない場合はpublishしない．
 `/robot_relative_box_twist`は`geometry_msgs/TwistStamped`で，線速度と角速度を`robot_config`座標でpublishする．最初の観測と，観測間隔が`max_velocity_dt`を超えた直後は速度を0へ初期化する．通常時はrobot相対poseの差分から速度を計算し，`velocity_filter_alpha`の指数移動平均を適用する．

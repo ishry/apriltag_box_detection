@@ -118,6 +118,7 @@ class BoxDetectionNode:
         self.overlay_enabled = bool(rospy.get_param("~overlay", True))
         self.bridge = CvBridge()
         self.pose_estimator = BoxPoseEstimator(subscribe=False)
+        self.warn_overlapping_tag_ids()
         self.camera_info = None
         self.sync_lock = threading.Lock()
         self.render_lock = threading.Lock()
@@ -165,6 +166,15 @@ class BoxDetectionNode:
             tag_ids.add(int(tag["id"]))
         return tag_ids
 
+    def warn_overlapping_tag_ids(self):
+        box_tag_ids = set(self.pose_estimator.tag_to_box.keys())
+        overlapping_ids = sorted(box_tag_ids.intersection(self.robot_tag_ids))
+        if overlapping_ids:
+            rospy.logwarn(
+                "tag ids assigned to both boxes and robot; detections may be ambiguous: %s",
+                overlapping_ids,
+            )
+
     def load_tag_sizes(self, path):
         config = load_config(path)
         tag_sizes = {}
@@ -177,14 +187,14 @@ class BoxDetectionNode:
         self.camera_info = msg
 
     def on_tag_detections(self, msg):
-        box_result = self.pose_estimator.on_detections(msg)
+        box_results = self.pose_estimator.on_detections(msg)
         if not self.overlay_enabled:
             return
 
         synced = self.store_and_take_synced(
             self.detection_results,
             msg.header.stamp,
-            (msg, box_result),
+            (msg, box_results),
         )
         if synced:
             self.publish_synced_image(*synced)
@@ -212,7 +222,7 @@ class BoxDetectionNode:
                 box_result,
             )
 
-    def publish_synced_image(self, image_msg, tag_detections, box_result):
+    def publish_synced_image(self, image_msg, tag_detections, box_results):
         with self.render_lock:
             try:
                 image = self.bridge.imgmsg_to_cv2(image_msg, desired_encoding="bgr8")
@@ -222,9 +232,14 @@ class BoxDetectionNode:
 
             output = image.copy()
             if self.camera_info:
-                if box_result is not None:
-                    camera_box, box, source_tag_id = box_result
-                    self.draw_box(output, camera_box, box, source_tag_id)
+                for box_result in box_results:
+                    self.draw_box(
+                        output,
+                        box_result["camera_box"],
+                        box_result["box"],
+                        box_result["box_name"],
+                        box_result["source_tag_id"],
+                    )
                 self.draw_robot_tags(output, tag_detections)
             else:
                 cv2.putText(output, "no camera info", (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 180, 255), 2)
@@ -233,7 +248,7 @@ class BoxDetectionNode:
             out_msg.header = image_msg.header
             self.image_pub.publish(out_msg)
 
-    def draw_box(self, image, transform, box, source_tag_id):
+    def draw_box(self, image, transform, box, box_name, source_tag_id):
         corners = [transform_point(transform, corner) for corner in self.box_corners(box)]
         pixels = [self.project(point) for point in corners]
 
@@ -246,7 +261,7 @@ class BoxDetectionNode:
         center = self.project((transform[0][3], transform[1][3], transform[2][3]))
         if center:
             cv2.circle(image, center, 4, (0, 0, 255), -1)
-            label = "%s from tag %s" % (box.get("name", "box"), source_tag_id)
+            label = "%s from tag %s" % (box_name, source_tag_id)
             cv2.putText(image, label, (center[0] + 8, center[1] - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
             self.draw_axes(image, transform, center, box)
 

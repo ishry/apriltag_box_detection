@@ -5,12 +5,28 @@ find_package(catkin REQUIRED COMPONENTS
   apriltag_ros
   cv_bridge
   geometry_msgs
+  message_generation
   rospy
   sensor_msgs
+  std_msgs
   visualization_msgs
 )
 
-catkin_package()
+add_message_files(
+  FILES
+  BoxPose.msg
+  BoxPoseArray.msg
+)
+
+generate_messages(
+  DEPENDENCIES
+  geometry_msgs
+  std_msgs
+)
+
+catkin_package(
+  CATKIN_DEPENDS geometry_msgs message_runtime std_msgs
+)
 
 catkin_install_python(PROGRAMS
   scripts/box_image_overlay.py

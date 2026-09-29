@@ -53,7 +53,9 @@
     <param name="min_velocity_dt" value="$(arg min_velocity_dt)" />
     <param name="max_velocity_dt" value="$(arg max_velocity_dt)" />
     <remap from="tag_detections" to="/tag_detections" />
+    <remap from="box_poses" to="/box_poses" />
     <remap from="box_pose" to="/box_pose" />
+    <remap from="robot_relative_box_poses" to="/robot_relative_box_poses" />
     <remap from="robot_relative_box_pose" to="/robot_relative_box_pose" />
     <remap from="robot_relative_box_twist" to="/robot_relative_box_twist" />
     <remap from="robot_relative_box_markers" to="/robot_relative_box_markers" />

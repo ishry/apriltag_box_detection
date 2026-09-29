@@ -27,6 +27,7 @@
     <remap from="camera_info" to="$(arg camera_info_topic)" />
     <remap from="tag_detections" to="/tag_detections" />
     <remap from="tag_detections_image" to="/tag_detections_image" />
+    <remap from="box_poses" to="/box_poses" />
     <remap from="box_pose" to="/box_pose" />
     <remap from="box_detection_markers" to="/box_detection_markers" />
     <remap from="box_detection_image" to="/box_detection_image" />

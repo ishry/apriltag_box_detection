@@ -2,6 +2,7 @@ frame_id: box_config
 
 boxes:
   - name: box_0
+    id: box_0
     size:
       x: 0.15
       y: 0.15
@@ -50,6 +51,22 @@ boxes:
       #     yaw: 0.0
       - id: 5
         face: 4
+        offset:
+          u: 0.00
+          v: 0.00
+          normal: 0.002
+        rotation:
+          yaw: 0.0
+  - id: box_1
+    name: box_1
+    size:
+      x: 0.15
+      y: 0.15
+      z: 0.8
+
+    tags:
+      - id: 4
+        face: 5
         offset:
           u: 0.00
           v: 0.00
