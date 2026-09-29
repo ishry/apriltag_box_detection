@@ -5,6 +5,7 @@
   <arg name="color_width" default="-1" />
   <arg name="color_height" default="-1" />
   <arg name="color_fps" default="-1" />
+  <arg name="color_exposure" default="20" />
   <arg name="enable_depth" default="true" />
   <arg name="enable_confidence" default="true" />
   <arg name="publish_tf" default="true" />
@@ -14,6 +15,11 @@
   <arg name="overlay" default="true" />
   <arg name="rviz" default="true" />
   <arg name="rviz_config_file" default="$(find apriltag_box_detection)/rviz/box_detection_realsense.rviz" />
+
+  <group ns="$(arg camera)">
+    <param name="rgb_camera/enable_auto_exposure" type="bool" value="false" />
+    <param name="rgb_camera/exposure" type="int" value="$(arg color_exposure)" />
+  </group>
 
   <include file="$(find realsense2_camera)/launch/rs_camera.launch">
     <arg name="camera" value="$(arg camera)" />

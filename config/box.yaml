@@ -8,48 +8,48 @@ boxes:
       z: 0.8
 
     tags:
-      - id: 0
-        face: 0
-        offset:
-          u: 0.00
-          v: 0.00
-          normal: 0.002
-        rotation:
-          yaw: 0.0
-      - id: 1
-        face: 1
-        offset:
-          u: 0.00
-          v: 0.00
-          normal: 0.002
-        rotation:
-          yaw: 0.0
-      - id: 2
-        face: 2
-        offset:
-          u: 0.00
-          v: 0.00
-          normal: 0.002
-        rotation:
-          yaw: 0.0
-      - id: 3
-        face: 3
-        offset:
-          u: 0.00
-          v: 0.00
-          normal: 0.002
-        rotation:
-          yaw: 0.0
-      - id: 4
-        face: 4
-        offset:
-          u: 0.06
-          v: 00.00
-          normal: 0.002
-        rotation:
-          yaw: 0.0
+      # - id: 0
+      #   face: 0
+      #   offset:
+      #     u: 0.00
+      #     v: 0.00
+      #     normal: 0.002
+      #   rotation:
+      #     yaw: 0.0
+      # - id: 1
+      #   face: 1
+      #   offset:
+      #     u: 0.00
+      #     v: 0.00
+      #     normal: 0.002
+      #   rotation:
+      #     yaw: 0.0
+      # - id: 2
+      #   face: 2
+      #   offset:
+      #     u: 0.00
+      #     v: 0.00
+      #     normal: 0.002
+      #   rotation:
+      #     yaw: 0.0
+      # - id: 3
+      #   face: 3
+      #   offset:
+      #     u: 0.00
+      #     v: 0.00
+      #     normal: 0.002
+      #   rotation:
+      #     yaw: 0.0
+      # - id: 4
+      #   face: 4
+      #   offset:
+      #     u: 0.06
+      #     v: 00.00
+      #     normal: 0.002
+      #   rotation:
+      #     yaw: 0.0
       - id: 5
-        face: 5
+        face: 4
         offset:
           u: 0.00
           v: 0.00

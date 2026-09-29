@@ -8,6 +8,7 @@
   <arg name="urdf_file" default="/home/leus/catkin_ws/manta_ws/src/manta_controller/manta_ros_bridge_tutorials/models/MANTA_HR_TAIL.urdf" />
   <arg name="manta_package_root" default="/home/leus/catkin_ws/manta_ws/src/manta_controller" />
   <arg name="root_frame" default="CHASSIS" />
+  <arg name="publish_robot_model" default="true" />
   <arg name="overlay" default="true" />
   <arg name="velocity_filter_alpha" default="0.2" />
   <arg name="min_velocity_dt" default="0.001" />
@@ -15,12 +16,12 @@
 
   <env name="ROS_PACKAGE_PATH" value="$(arg manta_package_root):$(optenv ROS_PACKAGE_PATH)" />
 
-  <param name="robot_description" textfile="$(arg urdf_file)" />
+  <param if="$(arg publish_robot_model)" name="robot_description" textfile="$(arg urdf_file)" />
 
-  <node pkg="joint_state_publisher" type="joint_state_publisher"
+  <node if="$(arg publish_robot_model)" pkg="joint_state_publisher" type="joint_state_publisher"
         name="robot_relative_joint_state_publisher" output="screen" />
 
-  <node pkg="robot_state_publisher" type="robot_state_publisher"
+  <node if="$(arg publish_robot_model)" pkg="robot_state_publisher" type="robot_state_publisher"
         name="robot_relative_robot_state_publisher" output="screen" />
 
   <node pkg="tf" type="static_transform_publisher"
