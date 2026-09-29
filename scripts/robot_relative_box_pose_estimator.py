@@ -7,7 +7,7 @@ import rospy
 import rospkg
 import yaml
 from apriltag_ros.msg import AprilTagDetectionArray
-from geometry_msgs.msg import Point, PoseStamped, TwistStamped, Vector3
+from geometry_msgs.msg import Point, Vector3
 from std_msgs.msg import ColorRGBA
 from visualization_msgs.msg import Marker, MarkerArray
 from apriltag_box_detection.msg import BoxPose, BoxPoseArray, BoxTwist, BoxTwistArray
@@ -290,8 +290,6 @@ class RobotRelativeBoxPoseEstimator:
             raise ValueError("max_velocity_dt must be greater than min_velocity_dt")
 
         self.pose_array_pub = rospy.Publisher("robot_relative_box_poses", BoxPoseArray, queue_size=1)
-        self.pose_pub = rospy.Publisher("robot_relative_box_pose", PoseStamped, queue_size=1)
-        self.twist_pub = rospy.Publisher("robot_relative_box_twist", TwistStamped, queue_size=1)
         self.twist_array_pub = rospy.Publisher("robot_relative_box_twists", BoxTwistArray, queue_size=1)
         self.marker_pub = rospy.Publisher("robot_relative_box_markers", MarkerArray, queue_size=1)
         self.tag_subscriber = rospy.Subscriber("tag_detections", AprilTagDetectionArray, self.on_detections, queue_size=1)
@@ -370,7 +368,6 @@ class RobotRelativeBoxPoseEstimator:
         twist_array = BoxTwistArray()
         twist_array.header.stamp = stamp
         twist_array.header.frame_id = self.robot_frame_id
-        twists_by_id = {}
 
         for result in robot_boxes:
             box_pose = BoxPose()
@@ -389,20 +386,9 @@ class RobotRelativeBoxPoseEstimator:
             box_twist.source_tag_id = result["source_tag_id"]
             self.set_twist(box_twist.twist, linear_velocity, angular_velocity)
             twist_array.boxes.append(box_twist)
-            twists_by_id[result["box_id"]] = (linear_velocity, angular_velocity)
 
         self.pose_array_pub.publish(pose_array)
         self.twist_array_pub.publish(twist_array)
-
-        # Keep the original single-pose topics for existing RL consumers.
-        # The first configured/detected box remains the compatibility target.
-        if robot_boxes:
-            first_box = robot_boxes[0]
-            self.publish_robot_relative_box_pose(stamp, first_box["robot_box"])
-            linear_velocity, angular_velocity = twists_by_id[first_box["box_id"]]
-            self.publish_robot_relative_box_twist(
-                stamp, linear_velocity, angular_velocity
-            )
 
     def set_pose(self, pose, transform):
         position, quaternion = transform_to_pose(transform)
@@ -413,20 +399,6 @@ class RobotRelativeBoxPoseEstimator:
         pose.orientation.y = quaternion[1]
         pose.orientation.z = quaternion[2]
         pose.orientation.w = quaternion[3]
-
-    def publish_robot_relative_box_pose(self, stamp, robot_box):
-        position, quaternion = transform_to_pose(robot_box)
-        pose_msg = PoseStamped()
-        pose_msg.header.stamp = stamp
-        pose_msg.header.frame_id = self.robot_frame_id
-        pose_msg.pose.position.x = position[0]
-        pose_msg.pose.position.y = position[1]
-        pose_msg.pose.position.z = position[2]
-        pose_msg.pose.orientation.x = quaternion[0]
-        pose_msg.pose.orientation.y = quaternion[1]
-        pose_msg.pose.orientation.z = quaternion[2]
-        pose_msg.pose.orientation.w = quaternion[3]
-        self.pose_pub.publish(pose_msg)
 
     def update_robot_relative_box_twist(self, box_id, stamp, robot_box):
         state = self.box_velocity_states.get(box_id)
@@ -490,13 +462,6 @@ class RobotRelativeBoxPoseEstimator:
         twist.angular.x = angular_velocity[0]
         twist.angular.y = angular_velocity[1]
         twist.angular.z = angular_velocity[2]
-
-    def publish_robot_relative_box_twist(self, stamp, linear_velocity, angular_velocity):
-        twist_msg = TwistStamped()
-        twist_msg.header.stamp = stamp
-        twist_msg.header.frame_id = self.robot_frame_id
-        self.set_twist(twist_msg.twist, linear_velocity, angular_velocity)
-        self.twist_pub.publish(twist_msg)
 
     def publish_robot_relative_markers(self, stamp, robot_boxes):
         marker_array = MarkerArray()

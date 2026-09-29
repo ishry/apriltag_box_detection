@@ -36,11 +36,6 @@ Visualization Manager:
         {}
       Queue Size: 100
       Value: true
-    - Class: rviz/Pose
-      Enabled: true
-      Name: Robot Relative Box Pose
-      Topic: /robot_relative_box_pose
-      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
