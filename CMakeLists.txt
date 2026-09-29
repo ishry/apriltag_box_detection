@@ -16,6 +16,8 @@ add_message_files(
   FILES
   BoxPose.msg
   BoxPoseArray.msg
+  BoxTwist.msg
+  BoxTwistArray.msg
 )
 
 generate_messages(

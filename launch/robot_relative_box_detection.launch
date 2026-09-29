@@ -58,6 +58,7 @@
     <remap from="robot_relative_box_poses" to="/robot_relative_box_poses" />
     <remap from="robot_relative_box_pose" to="/robot_relative_box_pose" />
     <remap from="robot_relative_box_twist" to="/robot_relative_box_twist" />
+    <remap from="robot_relative_box_twists" to="/robot_relative_box_twists" />
     <remap from="robot_relative_box_markers" to="/robot_relative_box_markers" />
   </node>
 </launch>

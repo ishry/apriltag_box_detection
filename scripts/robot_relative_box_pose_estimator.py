@@ -10,7 +10,7 @@ from apriltag_ros.msg import AprilTagDetectionArray
 from geometry_msgs.msg import Point, PoseStamped, TwistStamped, Vector3
 from std_msgs.msg import ColorRGBA
 from visualization_msgs.msg import Marker, MarkerArray
-from apriltag_box_detection.msg import BoxPose, BoxPoseArray
+from apriltag_box_detection.msg import BoxPose, BoxPoseArray, BoxTwist, BoxTwistArray
 
 
 BOX_EDGES = [
@@ -278,10 +278,7 @@ class RobotRelativeBoxPoseEstimator:
         self.last_camera_robot = None
         self.last_robot_stamp = None
         self.last_robot_tag_id = None
-        self.last_robot_box = None
-        self.last_box_stamp = None
-        self.filtered_linear_velocity = None
-        self.filtered_angular_velocity = None
+        self.box_velocity_states = {}
         self.velocity_filter_alpha = float(rospy.get_param("~velocity_filter_alpha", 0.2))
         self.min_velocity_dt = float(rospy.get_param("~min_velocity_dt", 0.001))
         self.max_velocity_dt = float(rospy.get_param("~max_velocity_dt", 0.5))
@@ -295,6 +292,7 @@ class RobotRelativeBoxPoseEstimator:
         self.pose_array_pub = rospy.Publisher("robot_relative_box_poses", BoxPoseArray, queue_size=1)
         self.pose_pub = rospy.Publisher("robot_relative_box_pose", PoseStamped, queue_size=1)
         self.twist_pub = rospy.Publisher("robot_relative_box_twist", TwistStamped, queue_size=1)
+        self.twist_array_pub = rospy.Publisher("robot_relative_box_twists", BoxTwistArray, queue_size=1)
         self.marker_pub = rospy.Publisher("robot_relative_box_markers", MarkerArray, queue_size=1)
         self.tag_subscriber = rospy.Subscriber("tag_detections", AprilTagDetectionArray, self.on_detections, queue_size=1)
         self.box_subscriber = rospy.Subscriber("box_poses", BoxPoseArray, self.on_box_poses, queue_size=1)
@@ -369,6 +367,10 @@ class RobotRelativeBoxPoseEstimator:
         pose_array = BoxPoseArray()
         pose_array.header.stamp = stamp
         pose_array.header.frame_id = self.robot_frame_id
+        twist_array = BoxTwistArray()
+        twist_array.header.stamp = stamp
+        twist_array.header.frame_id = self.robot_frame_id
+        twists_by_id = {}
 
         for result in robot_boxes:
             box_pose = BoxPose()
@@ -378,14 +380,29 @@ class RobotRelativeBoxPoseEstimator:
             self.set_pose(box_pose.pose, result["robot_box"])
             pose_array.boxes.append(box_pose)
 
+            linear_velocity, angular_velocity = self.update_robot_relative_box_twist(
+                result["box_id"], stamp, result["robot_box"]
+            )
+            box_twist = BoxTwist()
+            box_twist.box_id = result["box_id"]
+            box_twist.box_name = result["box_name"]
+            box_twist.source_tag_id = result["source_tag_id"]
+            self.set_twist(box_twist.twist, linear_velocity, angular_velocity)
+            twist_array.boxes.append(box_twist)
+            twists_by_id[result["box_id"]] = (linear_velocity, angular_velocity)
+
         self.pose_array_pub.publish(pose_array)
+        self.twist_array_pub.publish(twist_array)
 
         # Keep the original single-pose topics for existing RL consumers.
         # The first configured/detected box remains the compatibility target.
         if robot_boxes:
-            robot_box = robot_boxes[0]["robot_box"]
-            self.publish_robot_relative_box_pose(stamp, robot_box)
-            self.update_and_publish_robot_relative_box_twist(stamp, robot_box)
+            first_box = robot_boxes[0]
+            self.publish_robot_relative_box_pose(stamp, first_box["robot_box"])
+            linear_velocity, angular_velocity = twists_by_id[first_box["box_id"]]
+            self.publish_robot_relative_box_twist(
+                stamp, linear_velocity, angular_velocity
+            )
 
     def set_pose(self, pose, transform):
         position, quaternion = transform_to_pose(transform)
@@ -411,75 +428,74 @@ class RobotRelativeBoxPoseEstimator:
         pose_msg.pose.orientation.w = quaternion[3]
         self.pose_pub.publish(pose_msg)
 
-    def update_and_publish_robot_relative_box_twist(self, stamp, robot_box):
-        if self.last_robot_box is None:
-            self.last_robot_box = robot_box
-            self.last_box_stamp = stamp
-            self.publish_robot_relative_box_twist(
-                stamp,
-                (0.0, 0.0, 0.0),
-                (0.0, 0.0, 0.0),
-            )
-            return
+    def update_robot_relative_box_twist(self, box_id, stamp, robot_box):
+        state = self.box_velocity_states.get(box_id)
+        if state is None:
+            state = {
+                "robot_box": robot_box,
+                "stamp": stamp,
+                "linear_velocity": (0.0, 0.0, 0.0),
+                "angular_velocity": (0.0, 0.0, 0.0),
+            }
+            self.box_velocity_states[box_id] = state
+            return state["linear_velocity"], state["angular_velocity"]
 
-        dt = (stamp - self.last_box_stamp).to_sec()
+        dt = (stamp - state["stamp"]).to_sec()
         if dt < self.min_velocity_dt:
             rospy.logwarn_throttle(
                 2.0,
                 "box pose timestamp did not advance enough for velocity estimation",
             )
-            return
+            return state["linear_velocity"], state["angular_velocity"]
 
         if dt > self.max_velocity_dt:
-            self.last_robot_box = robot_box
-            self.last_box_stamp = stamp
-            self.filtered_linear_velocity = None
-            self.filtered_angular_velocity = None
-            self.publish_robot_relative_box_twist(
-                stamp,
-                (0.0, 0.0, 0.0),
-                (0.0, 0.0, 0.0),
-            )
+            state["robot_box"] = robot_box
+            state["stamp"] = stamp
+            state["linear_velocity"] = (0.0, 0.0, 0.0)
+            state["angular_velocity"] = (0.0, 0.0, 0.0)
+            state.pop("filtered_linear_velocity", None)
+            state.pop("filtered_angular_velocity", None)
             rospy.logwarn_throttle(
                 2.0,
                 "box pose gap exceeded %.3f s; robot-relative velocity was reset",
                 self.max_velocity_dt,
             )
-            return
+            return state["linear_velocity"], state["angular_velocity"]
 
         linear_velocity, angular_velocity = transform_velocity(
-            self.last_robot_box,
+            state["robot_box"],
             robot_box,
             dt,
         )
-        self.filtered_linear_velocity = filter_vector(
-            self.filtered_linear_velocity,
+        state["filtered_linear_velocity"] = filter_vector(
+            state.get("filtered_linear_velocity"),
             linear_velocity,
             self.velocity_filter_alpha,
         )
-        self.filtered_angular_velocity = filter_vector(
-            self.filtered_angular_velocity,
+        state["filtered_angular_velocity"] = filter_vector(
+            state.get("filtered_angular_velocity"),
             angular_velocity,
             self.velocity_filter_alpha,
         )
-        self.last_robot_box = robot_box
-        self.last_box_stamp = stamp
-        self.publish_robot_relative_box_twist(
-            stamp,
-            self.filtered_linear_velocity,
-            self.filtered_angular_velocity,
-        )
+        state["robot_box"] = robot_box
+        state["stamp"] = stamp
+        state["linear_velocity"] = state["filtered_linear_velocity"]
+        state["angular_velocity"] = state["filtered_angular_velocity"]
+        return state["linear_velocity"], state["angular_velocity"]
+
+    def set_twist(self, twist, linear_velocity, angular_velocity):
+        twist.linear.x = linear_velocity[0]
+        twist.linear.y = linear_velocity[1]
+        twist.linear.z = linear_velocity[2]
+        twist.angular.x = angular_velocity[0]
+        twist.angular.y = angular_velocity[1]
+        twist.angular.z = angular_velocity[2]
 
     def publish_robot_relative_box_twist(self, stamp, linear_velocity, angular_velocity):
         twist_msg = TwistStamped()
         twist_msg.header.stamp = stamp
         twist_msg.header.frame_id = self.robot_frame_id
-        twist_msg.twist.linear.x = linear_velocity[0]
-        twist_msg.twist.linear.y = linear_velocity[1]
-        twist_msg.twist.linear.z = linear_velocity[2]
-        twist_msg.twist.angular.x = angular_velocity[0]
-        twist_msg.twist.angular.y = angular_velocity[1]
-        twist_msg.twist.angular.z = angular_velocity[2]
+        self.set_twist(twist_msg.twist, linear_velocity, angular_velocity)
         self.twist_pub.publish(twist_msg)
 
     def publish_robot_relative_markers(self, stamp, robot_boxes):
